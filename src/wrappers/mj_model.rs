@@ -3,7 +3,7 @@ use crate::{
     view_creator, info_method, info_with_view,
     array_slice_dyn, getter_setter
 };
-use crate::util::{assert_mujoco_version, checked_c_len, ERROR_BUF_LEN};
+use crate::util::{ERROR_BUF_LEN, assert_mujoco_version, checked_c_len, optional_sparse_addr_range, string_from_c};
 use crate::error::{MjDataError, MjModelError};
 use crate::wrappers::mj_option::MjOption;
 use crate::wrappers::mj_data::MjData;
@@ -20,6 +20,7 @@ use std::fmt::{Formatter, Debug, Result as FmtResult};
 use std::ffi::{c_char, CStr, CString, c_int, c_void};
 use std::sync::{OnceLock, Arc};
 use std::ptr::{self, NonNull};
+use std::borrow::Cow;
 use std::path::Path;
 use std::fs::File;
 
@@ -137,8 +138,8 @@ pub type MjtBias = mjtBias;
 /// Orientation input charts of so3 actuators. These values are used in `m->actuator_ctrlspec`.
 pub type MjtCtrlChart = mjtCtrlChart;
 
-/// Input signature bits of servo-family (`pid`, `dcmotor`) actuators. These values are OR-ed into
-/// `m->actuator_ctrlspec`.
+/// Input bitflags of actuators: the input subset of `pid` and `dcmotor` actuators, and the declared
+/// input of actuators with fixed or affine gain. These values are OR-ed into `m->actuator_ctrlspec`.
 pub type MjtCtrlInput = mjtCtrlInput;
 
 /// MuJoCo object types. These are used, for example, in the support functions `mj_name2id` and
@@ -335,8 +336,8 @@ model_layout! {
         ngeom,          nsite,          ncam,           nlight,
         nflex,          nflexnode,      nflexvert,      nflexedge,
         nflexelem,      nflexelemdata,  nflexstiffness, nflexbending,
-        nefm0dof,       nefm0L,         nflexelemedge,  nflexshelldata,
-        nflexevpair,    nflextexcoord,  nJfe,           nJfv,
+        nefm0dof,       nefm0L,         nefmCvert,      nflexelemedge,
+        nflexshelldata, nflextexcoord,  nJfe,           nJfv,
         nskin,          nskinvert,      nskintexvert,   nskinface,
         nskinbone,      nskinbonevert,  nmat,           npair,
         nexclude,       neq,            ntendon,        nJten,
@@ -367,18 +368,18 @@ model_layout! {
         dof_parentid,        dof_treeid,          dof_Madr,            tree_bodyadr,
         tree_bodynum,        tree_dofadr,         tree_dofnum,         geom_type,
         geom_condim,         geom_bodyid,         geom_dataid,         geom_matid,
-        geom_plugin,         site_bodyid,         site_matid,          cam_bodyid,
-        cam_targetbodyid,    cam_resolution,      light_bodyid,        light_targetbodyid,
-        light_texid,         flex_condim,         flex_dim,            flex_matid,
-        flex_interp,         flex_cellnum,        flex_nodeadr,        flex_nodenum,
-        flex_vertadr,        flex_vertnum,        flex_edgeadr,        flex_edgenum,
-        flex_elemadr,        flex_elemnum,        flex_elemdataadr,    flex_stiffnessadr,
-        flex_elemedgeadr,    flex_bendingadr,     flex_shellnum,       flex_shelldataadr,
-        flex_evpairadr,      flex_evpairnum,      flex_texcoordadr,    flex_nodebodyid,
+        geom_plugin,         site_type,           site_bodyid,         site_dataid,
+        site_matid,          cam_bodyid,          cam_targetbodyid,    cam_resolution,
+        light_bodyid,        light_targetbodyid,  light_texid,         flex_condim,
+        flex_dim,            flex_matid,          flex_interp,         flex_cellnum,
+        flex_nodeadr,        flex_nodenum,        flex_vertadr,        flex_vertnum,
+        flex_edgeadr,        flex_edgenum,        flex_elemadr,        flex_elemnum,
+        flex_elemdataadr,    flex_stiffnessadr,   flex_elemedgeadr,    flex_bendingadr,
+        flex_shellnum,       flex_shelldataadr,   flex_texcoordadr,    flex_nodebodyid,
         flex_vertbodyid,     flex_vertedgeadr,    flex_vertedgenum,    flex_vertedge,
         flex_edge,           flex_edgeflap,       flex_elem,           flex_elemtexcoord,
-        flex_elemedge,       flex_elemlayer,      flex_shell,          flex_evpair,
-        efm0_dofid,          efm0_L_rownnz,       efm0_L_rowadr,       efm0_L_colind,
+        flex_elemedge,       flex_elemlayer,      flex_shell,          efm0_dofid,
+        efm0_L_rownnz,       efm0_L_rowadr,       efm0_L_colind,       efmC_perm,
         flex_rigid,          flex_bvhadr,         flex_bvhnum,         flexedge_J_rownnz,
         flexedge_J_rowadr,   flexedge_J_colind,   flexvert_J_rownnz,   flexvert_J_rowadr,
         flexvert_J_colind,   skin_matid,          skin_vertadr,        skin_vertnum,
@@ -463,7 +464,7 @@ impl MjModel {
             error_buffer.as_mut_ptr(), error_buffer.len() as c_int
         ) };
 
-        Self::check_raw_model(raw_ptr, &error_buffer)
+        Self::check_raw_model(raw_ptr, &error_buffer, MjModelError::LoadFailed)
             .inspect(|_| debug!("loaded the model from \"{path_str}\""))
     }
 
@@ -492,7 +493,7 @@ impl MjModel {
             error_buffer.as_mut_ptr(), error_buffer.len() as c_int
         ) };
 
-        Self::check_raw_model(raw_ptr, &error_buffer)
+        Self::check_raw_model(raw_ptr, &error_buffer, MjModelError::LoadFailed)
     }
 
     /// Loads the model from MJB raw data.
@@ -503,7 +504,7 @@ impl MjModel {
     /// Returns [`MjModelError::LoadFailed`] if MuJoCo fails to parse the MJB buffer.
     /// # Panics
     /// When the linked MuJoCo version does not match the expected from MuJoCo-rs, or when `data`
-    /// is longer than [`i32::MAX`] bytes.
+    /// is longer than [`MjtSize::MAX`] bytes.
     pub fn from_buffer(data: &[u8]) -> Result<Self, MjModelError> {
         assert_mujoco_version();
         unsafe {
@@ -556,7 +557,7 @@ impl MjModel {
 
     /// Creates a [`MjModel`] from a raw pointer.
     pub(crate) fn from_raw(ptr: *mut mjModel) -> Result<Self, MjModelError> {
-        Self::check_raw_model(ptr, &[0])
+        Self::check_raw_model(ptr, &[0], MjModelError::LoadFailed)
     }
 
     /// Saves the last loaded XML to `filename`.
@@ -584,11 +585,8 @@ impl MjModel {
             },
             _ => {
                 // SAFETY: error is zero-initialised and MuJoCo NUL-terminates the message it
-                // writes into it; the resulting CStr borrows the stack buffer and is consumed
-                // before the buffer goes out of scope.
-                let cstr_error = unsafe { CStr::from_ptr(error.as_ptr()) }
-                    .to_string_lossy()
-                    .into_owned();
+                // writes into it.
+                let cstr_error = unsafe { string_from_c(error.as_ptr()) };
                 Err(MjModelError::SaveFailed(cstr_error))
             },
         }
@@ -660,16 +658,19 @@ impl MjModel {
 
     /// Wraps a raw model pointer returned by MuJoCo load functions.
     /// Returns an error with the C error-buffer message if the pointer is null.
-    fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[c_char]) -> Result<Self, MjModelError> {
+    fn check_raw_model(
+        ptr_model: *mut mjModel,
+        error_buffer: &[c_char],
+        variant: impl FnOnce(String) -> MjModelError
+    ) -> Result<Self, MjModelError>
+    {
         match NonNull::new(ptr_model) {
             Some(nn) => Ok(Self { ptr: nn, layout: OnceLock::new() }),
             None => {
                 // SAFETY: error_buffer is zero-initialised and MuJoCo always
                 // NUL-terminates the message it writes into it.
-                let message = unsafe { CStr::from_ptr(error_buffer.as_ptr()) }
-                    .to_string_lossy()
-                    .into_owned();
-                Err(MjModelError::LoadFailed(message))
+                let message = unsafe { string_from_c(error_buffer.as_ptr()) };
+                Err(variant(message))
             }
         }
     }
@@ -804,7 +805,7 @@ impl MjModel {
     }
 
     info_method! { Model, site,
-        [r#type: 1, bodyid: 1, matid: 1,
+        [r#type: 1, bodyid: 1, dataid: 1, matid: 1,
         group: 1, sameframe: 1, size: 3,
         pos: 3, quat: 4, rgba: 4],
         [user: nuser_site],
@@ -833,7 +834,7 @@ impl MjModel {
     info_method! { Model, texture,
         [r#type: 1, colorspace: 1, height: 1,
         width: 1, nchannel: 1,
-        adr: 1, pathadr: 1],
+        adr: 1, pathadr: 1, contenttypeadr: 1],
         [],
         [data: ntexdata]
     }
@@ -930,7 +931,7 @@ impl MjModel {
         }
         unsafe { mj_saveModel(
             self.ffi(), ptr::null(),
-            buffer.as_mut_ptr() as *mut c_void, buffer.len() as i32
+            buffer.as_mut_ptr() as *mut c_void, checked_c_len(buffer.len())
         ) };
         Ok(())
     }
@@ -1325,6 +1326,77 @@ impl MjModel {
         }
     }
 
+    /// Creates a copy of this [`MjModel`] which embeds all of its assets
+    /// (some of which may be loaded by reference in this [`MjModel`]).
+    /// 
+    /// Wraps [`mj_embedAssets`].
+    ///
+    /// # Errors
+    /// Returns [`MjModelError::AssetLoadFailed`] with MuJoCo's error message when a by-reference asset
+    /// does not resolve.
+    pub fn to_embed_assets(&self) -> Result<MjModel, MjModelError> {
+        let mut error = [0; ERROR_BUF_LEN];
+        // SAFETY: the ffi pointer is always valid while MjModel exists. Error length is checked and can't overflow.
+        let embedded_ptr = unsafe {
+            mj_embedAssets(self.ptr.as_ptr(), error.as_mut_ptr(), error.len() as i32)
+        };
+
+        Self::check_raw_model(embedded_ptr, &error, MjModelError::AssetLoadFailed)
+    }
+
+    /// Decodes texture `id` to raw bytes with [`MjModel::tex_nchannel`] channels. An embedded
+    /// texture borrows its slice of [`MjModel::tex_data`].
+    /// Wraps [`mj_loadTexture`].
+    ///
+    /// # Errors
+    /// - [`MjModelError::IndexOutOfBounds`] when `id >= ntex`.
+    /// - [`MjModelError::AssetLoadFailed`] with MuJoCo's error message if a by-reference texture
+    ///   fails to load.
+    pub fn load_texture(&self, id: usize) -> Result<Cow<'_, [MjtByte]>, MjModelError> {
+        if id >= self.ntex() as usize {  // ntex can't be negative unless user used the unsafe API to make it such.
+            return Err(MjModelError::IndexOutOfBounds { id, len: self.ntex() as usize });
+        }
+
+        if let Some((start, length)) =
+            optional_sparse_addr_range(self.tex_adr(), id, self.ntexdata() as usize)
+        {
+            return Ok(Cow::Borrowed(&self.tex_data()[start..start+length]));
+        }
+
+        let mut data = ptr::null_mut();
+        let mut width = 0;
+        let mut height = 0;
+        let mut error = [0; ERROR_BUF_LEN];
+        // SAFETY: ffi pointer is always valid when this function is called, id is checked for overflows,
+        // null fields indicate no data and don't need to be non-null, error-array size fits in `c_int` of any size.
+        let result = unsafe { mj_loadTexture(
+                self.ptr.as_ptr(),
+                checked_c_len(id),
+                &mut data,
+                &mut width, &mut height, ptr::null_mut(),
+                error.as_mut_ptr(),
+                error.len() as c_int  // Can't overflow
+            ) };
+
+        if result != 0 {
+            // SAFETY: error is zero-initialised and MuJoCo NULL-terminates the message it writes.
+            let message = unsafe { string_from_c(error.as_ptr()) };
+            return Err(MjModelError::AssetLoadFailed(message));
+        }
+
+        // SAFETY: `data` pointer is guaranteed to be valid by `mj_loadTexture`, lengths
+        // are provided by `mj_loadTexture` and tex_nchannel is always valid when user
+        // uses MuJoCo-rs via safe-only code.
+        let r = Cow::Owned(unsafe { std::slice::from_raw_parts(
+            data, self.tex_nchannel()[id] as usize * width as usize * height as usize
+        ).to_vec()});
+
+        // SAFETY: `data` was loaded inside `mj_loadTexture` using `mju_malloc`.
+        unsafe { mju_free(data as *mut c_void) };
+
+        Ok(r)
+    }
+
     /* FFI */
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
@@ -1406,12 +1478,12 @@ impl MjModel {
         [ffi] nflexelem: MjtSize; "number of elements in all flexes.";
         [ffi] nflexelemdata: MjtSize; "number of element vertex ids in all flexes.";
         [ffi] nflexstiffness: MjtSize; "number of stiffness parameters in all flexes.";
-        [ffi] nflexbending: MjtSize; "number of bending parameters in all flexes";
+        [ffi] nflexbending: MjtSize; "number of bending parameters in all flexes.";
         [ffi] nefm0dof: MjtSize; "number of dofs covered by the constant metric factor.";
         [ffi] nefm0L: MjtSize; "number of non-zeros in the constant metric factor.";
+        [ffi] nefmCvert: MjtSize; "number of sparse metric factor ordering slots.";
         [ffi] nflexelemedge: MjtSize; "number of element edge ids in all flexes.";
         [ffi] nflexshelldata: MjtSize; "number of shell fragment vertex ids in all flexes.";
-        [ffi] nflexevpair: MjtSize; "number of element-vertex pairs in all flexes.";
         [ffi] nflextexcoord: MjtSize; "number of vertices with texture coordinates.";
         [ffi] nJfe: MjtSize; "number of non-zeros in sparse flexedge Jacobian matrix.";
         [ffi] nJfv: MjtSize; "number of non-zeros in sparse flexvert Jacobian matrix.";
@@ -1594,8 +1666,9 @@ impl MjModel {
         geom_adhesion: &[MjtNum; "adhesive force of contacts"; ffi().ngeom],
         geom_fluid: &[[MjtNum; mjNFLUID as usize] [force]; "fluid interaction parameters"; ffi().ngeom],
         geom_rgba: &[[f32; 4] [force]; "rgba when material is omitted"; ffi().ngeom],
-        site_type: &[MjtGeomBase [force]; "geom type for rendering"; ffi().nsite],
+        (mut = unsafe) site_type: &[MjtGeomBase [force]; "geom type for rendering"; ffi().nsite],
         (mut = unsafe) site_bodyid: &[i32; "id of site's body"; ffi().nsite],
+        (mut = unsafe) site_dataid: &[i32; "id of site's mesh; -1: none"; ffi().nsite],
         (mut = unsafe) site_matid: &[i32; "material id for rendering; -1: none"; ffi().nsite],
         site_group: &[i32; "group for visibility"; ffi().nsite],
         site_sameframe: &[MjtSameFrame [force]; "same frame as body"; ffi().nsite],
@@ -1650,7 +1723,6 @@ impl MjModel {
         flex_friction: &[[MjtNum; 3] [force]; "friction for (slide, spin, roll)"; ffi().nflex],
         flex_margin: &[MjtNum; "geometric inflation for contact"; ffi().nflex],
         flex_gap: &[MjtNum; "additional contact detection buffer"; ffi().nflex],
-        flex_internal: &[MjtBool; "internal flex collision enabled"; ffi().nflex],
         flex_selfcollide: &[MjtFlexSelf [force]; "self collision mode"; ffi().nflex],
         flex_activelayers: &[i32; "number of active element layers, 3D only"; ffi().nflex],
         flex_passive: &[i32; "passive collisions enabled"; ffi().nflex],
@@ -1673,8 +1745,6 @@ impl MjModel {
         (mut = unsafe) flex_bendingadr: &[i32; "first bending data address"; ffi().nflex],
         (mut = unsafe) flex_shellnum: &[i32; "number of shells"; ffi().nflex],
         (mut = unsafe) flex_shelldataadr: &[i32; "first shell data address"; ffi().nflex],
-        (mut = unsafe) flex_evpairadr: &[i32; "first evpair address"; ffi().nflex],
-        (mut = unsafe) flex_evpairnum: &[i32; "number of evpairs"; ffi().nflex],
         (mut = unsafe) flex_texcoordadr: &[i32; "address in flex_texcoord; -1: none"; ffi().nflex],
         (mut = unsafe) flex_nodebodyid: &[i32; "node body ids"; ffi().nflexnode],
         (mut = unsafe) flex_vertbodyid: &[i32; "vertex body ids"; ffi().nflexvert],
@@ -1688,7 +1758,6 @@ impl MjModel {
         (mut = unsafe) flex_elemedge: &[i32; "element edge ids"; ffi().nflexelemedge],
         (mut = unsafe) flex_elemlayer: &[i32; "element distance from surface, 3D only"; ffi().nflexelem],
         (mut = unsafe) flex_shell: &[i32; "shell fragment vertex ids (dim per frag)"; ffi().nflexshelldata],
-        (mut = unsafe) flex_evpair: &[[i32; 2] [force]; "(element, vertex) collision pairs"; ffi().nflexevpair],
         flex_vert: &[[MjtNum; 3] [force]; "vertex positions in local body frames"; ffi().nflexvert],
         flex_vert0: &[[MjtNum; 3] [force]; "vertex positions in qpos0 on [0, 1]^d"; ffi().nflexvert],
         flex_vertmetric: &[[MjtNum; 4] [force]; "inverse of reference shape matrix"; ffi().nflexvert],
@@ -1705,6 +1774,7 @@ impl MjModel {
         (mut = unsafe) efm0_L_rowadr: &[i32; "constant metric factor row addresses"; ffi().nefm0dof],
         (mut = unsafe) efm0_L_colind: &[i32; "constant metric factor column indices"; ffi().nefm0L],
         efm0_L: &[MjtNum; "factor of M + (dt^2+dt*d)*K_bend"; ffi().nefm0L],
+        (mut = unsafe) efmC_perm: &[i32; "sparse factor order: vertex dof or -1"; ffi().nefmCvert],
         flex_damping: &[MjtNum; "Rayleigh's damping coefficient"; ffi().nflex],
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
         flex_edgedamping: &[MjtNum; "edge damping"; ffi().nflex],
@@ -1790,9 +1860,10 @@ impl MjModel {
         (mut = unsafe) tex_height: &[i32; "number of rows in texture image"; ffi().ntex],
         (mut = unsafe) tex_width: &[i32; "number of columns in texture image"; ffi().ntex],
         (mut = unsafe) tex_nchannel: &[i32; "number of channels in texture image"; ffi().ntex],
-        (mut = unsafe) tex_adr: &[MjtSize; "start address in tex_data"; ffi().ntex],
+        (mut = unsafe) tex_adr: &[MjtSize; "start address in tex_data; -1 when loaded by-reference from file (i.e., not embedded in tex_data)"; ffi().ntex],
         tex_data: &[MjtByte; "pixel values"; ffi().ntexdata],
         (mut = unsafe) tex_pathadr: &[i32; "address of texture asset path; -1: none"; ffi().ntex],
+        (mut = unsafe) tex_contenttypeadr: &[i32; "content type address in paths; -1: none"; ffi().ntex],
         (mut = unsafe) mat_texid: &[[i32; MjtTextureRole::mjNTEXROLE as usize] [force]; "indices of textures; -1: none"; ffi().nmat],
         mat_texuniform: &[MjtBool; "make texture cube uniform"; ffi().nmat],
         mat_texrepeat: &[[f32; 2] [force]; "texture repetition for 2d mapping"; ffi().nmat],
@@ -1950,7 +2021,7 @@ impl MjModel {
         (mut = unsafe) name_pluginadr: &[i32; "plugin instance name pointers"; ffi().nplugin],
         (mut = unsafe) names: &[c_char; "names of all objects, 0-terminated"; ffi().nnames],
         (mut = unsafe) names_map: &[i32; "internal hash map of names"; ffi().nnames_map],
-        paths: &[c_char; "paths to assets, 0-terminated"; ffi().npaths],
+        (mut = unsafe) paths: &[c_char; "resolved paths to assets, 0-terminated"; ffi().npaths],
         (mut = unsafe) B_rownnz: &[i32; "body-dof: non-zeros in each row"; ffi().nbody],
         (mut = unsafe) B_rowadr: &[i32; "body-dof: row addresses"; ffi().nbody],
         (mut = unsafe) B_colind: &[i32; "body-dof: column indices"; ffi().nB],
@@ -2102,11 +2173,12 @@ info_with_view!(Model, geom,
 	[]);
 
 info_with_view!(Model, hfield,
-	[[hfield_] size: MjtNum],
-	[[hfield_] nrow: i32,
+	[],
+	[[hfield_] size: MjtNum,
+	 [hfield_] nrow: i32,
 	 [hfield_] ncol: i32,
 	 [hfield_] adr: i32,
-     [hfield_] pathadr: i32],
+	 [hfield_] pathadr: i32],
 	[[hfield_] data: f32]);
 
 info_with_view!(Model, joint,
@@ -2242,9 +2314,10 @@ info_with_view!(Model, site,
 	 [site_] pos: MjtNum,
 	 [site_] quat: MjtNum,
 	 [site_] user: MjtNum,
-	 [site_] rgba: f32,
-	 [site_] r#type: MjtGeomBase [force]],
-	[[site_] bodyid: i32,
+	 [site_] rgba: f32],
+	[[site_] r#type: MjtGeomBase [force],
+	 [site_] bodyid: i32,
+	 [site_] dataid: i32,
 	 [site_] matid: i32],
 	[]);
 
@@ -2289,7 +2362,8 @@ info_with_view!(Model, texture,
 	 [tex_] width: i32,
 	 [tex_] nchannel: i32,
 	 [tex_] adr: MjtSize,
-	 [tex_] pathadr: i32],
+	 [tex_] pathadr: i32,
+	 [tex_] contenttypeadr: i32],
 	[[tex_] data: MjtByte]);
 
 info_with_view!(Model, tuple,
@@ -2315,7 +2389,7 @@ info_with_view!(Model, key,
 #[expect(clippy::needless_range_loop,
          reason = "the loop indices drive FFI pointer arithmetic, ptr.add(i * stride + j)")]
 mod tests {
-    use crate::assert_relative_eq;
+    use crate::{assert_relative_eq, wrappers::{MjSpec, SpecItem, mj_editing::MjtEmbed}};
 
     use super::*;
     use std::fs;
@@ -4493,5 +4567,34 @@ mod tests {
 
         // SAFETY: no accessor of this block needs a pipeline stage; the compiler fills the model.
         unsafe { model.probe_dynamic_arrays_unsafe() };
+    }
+
+    #[test]
+    fn test_embedding_of_model() {
+        const TEX_NAME: &str = "someTexture.png";
+        const PNG_PATH: &str = "_TMP_someTexture.png";
+
+        std::fs::write(PNG_PATH, crate::util::testing::PNG_1X1).unwrap();
+
+        let mut spec = MjSpec::new();
+        spec.add_texture()
+            .with_file(PNG_PATH)
+            .with_name(TEX_NAME)
+            .set_embed(MjtEmbed::mjEMBED_FALSE);
+
+        let model = spec.compile().unwrap();
+        
+        // A by-reference texture stores its path, but no pixels.
+        assert_eq!(model.ffi().ntexdata, 0);
+        assert_eq!(model.tex_data().len(), 0);
+        assert_ne!(model.tex_pathadr()[0], -1);
+
+        // A embedded texture stores everything.
+        let model = model.to_embed_assets().unwrap();
+        assert_eq!(model.ffi().ntexdata, 3);
+        assert_eq!(model.tex_data().len(), model.ffi().ntexdata as usize);
+        assert_ne!(model.tex_pathadr()[0], -1);
+
+        std::fs::remove_file(PNG_PATH).unwrap();
     }
 }

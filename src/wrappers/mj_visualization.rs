@@ -520,6 +520,12 @@ impl MjvFigure {
     /// Every `linepnt` entry must lie within `0..=mjMAXLINEPNT`, the capacity of the matching
     /// `linedata` row. Automated checks from Rust side are too expensive.
     ///
+    /// `xformat`, `yformat`, `minwidth`, `title`, `xlabel` and each used `linename` row must be
+    /// NUL-terminated. `title`, `xlabel`, `minwidth` and each used `linename` row must hold only
+    /// bytes below `0x7F`, because the renderer indexes a 127-entry character width table with
+    /// them. `xformat` and `yformat` must each be a `printf` format with exactly one floating-point
+    /// conversion (e.g. `%.1f`) and no other conversion.
+    ///
     /// # Panics
     /// Panics if `flg_legend` is set and `legendoffset` is negative.
     pub unsafe fn draw(&mut self, viewport: MjrRectangle, context: &MjrContext) {
@@ -528,7 +534,7 @@ impl MjvFigure {
         assert!(
             self.flg_legend == 0 || self.legendoffset >= 0, "legendoffset must not be negative"
         );
-        // SAFETY: the caller guarantees every `linepnt` entry is within the `linedata` capacity.
+        // SAFETY: the caller upholds the `# Safety` contract.
         unsafe { mjr_figure(viewport, self, context.ffi()) };
     }
 }
@@ -1088,13 +1094,14 @@ impl MjvScene {
     /// geoms the call returns without drawing.
     ///
     /// # Panics
-    /// Panics if `context` holds fewer skins than the scene.
+    /// Panics if `context` was created from a model whose [`MjModelLayout`] differs from that of
+    /// the scene.
     pub fn render(&mut self, viewport: &MjrRectangle, context: &MjrContext){
-        // mjr_render uploads every skin of the scene into context.skinvertVBO[i], an array with
-        // one entry per skin of the model the context was built for, and null when it has none.
+        // mjr_render indexes fixed and per-model context arrays (materials, textures, skin VBOs)
+        // with ids taken from the scene's model.
         assert!(
-            self.nskin() <= context.nskin(),
-            "the context was created for a model with fewer skins"
+            self.layout == context.layout,
+            "the context was created for a model with a different layout"
         );
         unsafe {
             mjr_render(*viewport, self.ffi_mut(), context.ffi());
@@ -1192,7 +1199,7 @@ impl MjvScene {
         [ffi] nflex: i32; "number of flexes.";
         [ffi] nskin: i32; "number of skins.";
         [ffi] nlight: i32; "number of lights currently in buffer.";
-        [ffi] status: i32; "status; 0: ok, 1: geoms exhausted.";
+        [ffi] status: i32; "status; 0: ok, 1: geoms exhausted, warning issued.";
     ]}
 
     getter_setter! {get, [

@@ -9,19 +9,22 @@ use std::env;
 mod build_dependencies {
     use bindgen::callbacks::{DeriveInfo, EnumVariantValue, ParseCallbacks};
     use super::*;
-    use std::{cell::RefCell, collections::{BTreeMap, BTreeSet}, fs, sync::Arc};
+    use std::{cell::RefCell, collections::{BTreeMap, BTreeSet}, fs, rc::Rc};
+
+    /// The safe variants (name and value) of each enum, in declaration order.
+    type EnumSafeVariants = Rc<RefCell<BTreeMap<String, Vec<(String, u64)>>>>;
 
     #[derive(Debug)]
     struct BindgenOverrides {
         /// The variants of each enum that come before its count variant (e.g., `mjNOBJECT`).
         /// RefCell due to bindgen API limits.
-        enum_safe_variants: Arc<RefCell<BTreeMap<String, Vec<(String, u64)>>>>,
+        enum_safe_variants: EnumSafeVariants,
         /// The enums whose count variant was already seen, thus no later variant is safe.
         enum_safe_exhausted: RefCell<BTreeSet<String>>,
     }
 
     impl BindgenOverrides {
-        fn new(enum_safe_variants: Arc<RefCell<BTreeMap<String, Vec<(String, u64)>>>>) -> Self {
+        fn new(enum_safe_variants: EnumSafeVariants) -> Self {
             Self { enum_safe_variants, enum_safe_exhausted: RefCell::new(BTreeSet::new()) }
         }
     }
@@ -66,7 +69,7 @@ mod build_dependencies {
             variant_value: bindgen::callbacks::EnumVariantValue,
         ) -> Option<bindgen::callbacks::EnumVariantCustomBehavior>
         {
-            let Some(enum_name) = enum_name.and_then(|n| n.strip_prefix("enum ")) else { return None; };
+            let enum_name = enum_name.and_then(|n| n.strip_prefix("enum "))?;
             let mut borrow_safe_variants = self.enum_safe_variants.borrow_mut();
             let mut borrow_exhausted = self.enum_safe_exhausted.borrow_mut();
 
@@ -102,7 +105,7 @@ mod build_dependencies {
         let include_dir_mujoco = current_dir.join("mujoco/include/mujoco");
 
         // The variants of each enum that come before its count variant. These form the base enums.
-        let enum_safe_variants = Arc::new(RefCell::new(BTreeMap::new()));
+        let enum_safe_variants = Rc::new(RefCell::new(BTreeMap::new()));
 
         // Generate bindings
         let bindings_mujoco = bindgen::Builder::default()
@@ -168,8 +171,8 @@ mod build_dependencies {
         const WRAPPED_STRUCTS: [&str; 6] =
             ["mjModel_", "mjData_", "mjvScene_", "mjrContext_", "mjVFS_", "mjSpec_"];
         // mjpResourceProvider has a bare `pub type MjpResourceProvider` alias but no safe API
-        // consumes/produces it (the only consumer is the unwrapped unsafe FFI
-        // mjp_registerResourceProvider) and it has no accessors, so it is reachable only through
+        // consumes/produces it (only unwrapped unsafe FFI such as mjp_registerProvider and
+        // mj_mountVFS uses it) and it has no accessors, so it is reachable only through
         // unsafe FFI -- treat it as internal and keep its (pointer) fields public.
         const INTERNAL_STRUCTS: [&str; 9] = [
             "mjCache_", "mjpDecoder", "mjpEncoder", "mjpPlugin_",
@@ -316,7 +319,6 @@ fn main() {
         }
 
         println!("cargo::rustc-link-lib=static=mujoco");
-        println!("cargo::rustc-link-lib=static=lodepng");
         println!("cargo::rustc-link-lib=static=tinyxml2");
         println!("cargo::rustc-link-lib=static=qhullstatic_r");
         println!("cargo::rustc-link-lib=static=ccd");

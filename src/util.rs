@@ -1,5 +1,5 @@
 //! Utility types and macros used throughout the crate.
-use std::{marker::PhantomData, ops::{Deref, DerefMut}};
+use std::{ffi::CStr, marker::PhantomData, ops::{Deref, DerefMut}};
 use std::sync::{Mutex, MutexGuard};
 use std::ffi::{CString, c_char};
 use std::any::type_name;
@@ -7,7 +7,7 @@ use std::fmt::Display;
 
 use crate::mujoco_c::{mj_version, mjVERSION_HEADER};
 
-/// Helpers that only the generated sanitizer probes use.
+/// Helpers for the generated sanitizer probes, and fixtures for the in-crate tests.
 #[cfg(test)]
 pub(crate) mod testing;
 
@@ -38,6 +38,15 @@ pub(crate) fn write_ascii_to_buf(buf: &mut [c_char], value: &str) {
 /// Panics if `msg` contains interior `\0` characters.
 pub(crate) fn printf_safe_cstring(msg: &str) -> CString {
     CString::new(msg.replace('%', "%%")).unwrap()
+}
+
+/// Copies the C string at `c_str` into a new [`String`], replacing invalid UTF-8 with
+/// `U+FFFD`.
+///
+/// # Safety
+/// `c_str` must be non-null and point to a NULL-terminated string that is valid for reads.
+pub(crate) unsafe fn string_from_c(c_str: *const c_char) -> String {
+    unsafe { CStr::from_ptr(c_str).to_string_lossy().into_owned() }
 }
 
 /// Returns `Some((start, len))` for item `id` inside a packed data array,

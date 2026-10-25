@@ -132,8 +132,8 @@ pub trait SpecObject: SpecItem {
 
     /// Delete the element from the specification that holds it.
     ///
-    /// Deleting a body or a frame deletes its subtree, and frees every keyframe, and every actuator,
-    /// sensor, tendon, equality, pair and exclude that refers to the subtree.
+    /// Deleting a body or a frame deletes its subtree, and frees every actuator, sensor, tendon,
+    /// equality, pair and exclude that refers to the subtree.
     ///
     /// # Errors
     /// - [`MjEditError::UnsupportedOperation`] if the element is the world body.
@@ -141,11 +141,11 @@ pub trait SpecObject: SpecItem {
     ///   specification holds this one.
     ///
     /// # Safety
-    /// - Delete each element at most once. MuJoCo keeps the element allocated until the
-    ///   specification drops, so a second deletion frees it twice.
-    /// - Do not delete an element that the deletion of a body or a frame already took out of the
-    ///   specification. An iterator collected before that deletion still hands out its handle.
-    /// - Do not use the handle of an element that the deletion of a body or a frame freed.
+    /// - Delete each element at most once. MuJoCo frees the element during the deletion, thus a
+    ///   second deletion is use-after-free.
+    /// - Do not delete an element that an earlier deletion already took out of the specification.
+    ///   An iterator collected before that deletion still hands out its handle.
+    /// - Do not use the handle of an element that an earlier deletion freed.
     ///
     /// # Examples
     /// ```
@@ -696,21 +696,5 @@ mod tests {
             geom.set_user_value("key", Box::new(DropCounter(Rc::clone(&drops))));
         }
         assert_eq!(drops.get(), 3, "dropping the spec must drop the value it holds");
-    }
-
-    #[test]
-    fn test_user_value_dropped_on_element_delete() {
-        let drops = Rc::new(Cell::new(0));
-        {
-            let mut spec = MjSpec::new();
-            let geom = spec.world_body_mut().add_geom();
-            geom.set_user_value("key", Box::new(DropCounter(Rc::clone(&drops))));
-
-            // SAFETY: the borrow of the geom ends with the call, so no handle reaches the element
-            // after its deletion.
-            unsafe { geom.delete() }.unwrap();
-            assert_eq!(drops.get(), 0, "memory is supposed to be freed after the spec is dropped");
-        }
-        assert_eq!(drops.get(), 1, "the spec must drop the value a deleted element held");
     }
 }

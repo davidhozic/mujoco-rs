@@ -1,7 +1,7 @@
-.. _migrate_unreleased:
+.. _migrate_7_0_0:
 
-Unreleased [7.0.0] (MuJoCo 3.12.0)
-==================================
+Migrating to 7.0.0
+==================
 
 
 Tendon tree count is unsafe to mutate
@@ -129,15 +129,93 @@ Height field sizes are unsafe to mutate
 ---------------------------------------
 
 :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>hfield_size_mut` is now an ``unsafe fn``.
+The ``size`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjHfieldModelViewMut` is now
+:docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
 
 .. code-block:: rust
 
     // Before
     model.hfield_size_mut()[0][0] = 2.0;
+    model.hfield("h").unwrap().view_mut(&mut model).size[0] = 2.0;
 
     // After
     // SAFETY: every size is positive and finite.
     unsafe { model.hfield_size_mut()[0][0] = 2.0; }
+    let mut view = model.hfield("h").unwrap().view_mut(&mut model);
+    // SAFETY: the size is positive and finite.
+    unsafe { view.size.as_mut_slice()[0] = 2.0; }
+
+
+Site types and asset paths are unsafe to mutate
+-----------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>site_type_mut` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>paths_mut` are now ``unsafe fn``.
+The ``r#type`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjSiteModelViewMut` is now
+:docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
+
+.. code-block:: rust
+
+    // Before
+    model.site_type_mut()[0] = MjtGeom::mjGEOM_BOX;
+    model.site("s").unwrap().view_mut(&mut model).r#type[0] = MjtGeom::mjGEOM_BOX;
+
+    // After
+    // SAFETY: a box site needs no mesh data.
+    unsafe { model.site_type_mut()[0] = MjtGeomBase::mjGEOM_BOX; }
+    let mut view = model.site("s").unwrap().view_mut(&mut model);
+    // SAFETY: a box site needs no mesh data.
+    unsafe { view.r#type.as_mut_slice()[0] = MjtGeomBase::mjGEOM_BOX; }
+
+
+``zero`` of a mutable view skips the unsafe fields
+--------------------------------------------------
+
+The ``zero`` method of a mutable view (e.g.
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjActuatorModelViewMut::<method>zero`) no longer
+zeroes the fields that are now ``PointerViewUnsafeMut`` (above). Write these fields through the
+unsafe view if you need them zeroed.
+
+.. code-block:: rust
+
+    // Before
+    let mut view = model.actuator("a").unwrap().view_mut(&mut model);
+    view.zero();
+
+    // After
+    let mut view = model.actuator("a").unwrap().view_mut(&mut model);
+    view.zero();
+    // SAFETY: zero gain parameters are valid for the actuator type of "a".
+    unsafe { view.gainprm.as_mut_slice().fill(0.0); }
+
+
+More constraint arrays of ``MjData`` are unsafe to read
+-------------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_diag_a`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_kbip`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_d`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_r`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>iefc_d`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>iefc_r`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_y`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_ar`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efm_c` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efm_l` are now
+``unsafe fn``, and so are their ``_mut`` variants. MuJoCo does not zero these arrays, so read them
+only after the pipeline stage
+that computes them. ``efc_y`` and ``efc_ar`` stay uninitialized under some solver settings.
+
+.. code-block:: rust
+
+    // Before
+    data.step1();
+    let impedance = data.efc_kbip()[0][2];
+
+    // After
+    data.forward();
+    // SAFETY: forward built the constraints, so efc_kbip holds computed values.
+    let impedance = unsafe { data.efc_kbip() }[0][2];
 
 
 Viewer, renderer and scene constructors take ``&MjModel``
@@ -149,8 +227,6 @@ Viewer, renderer and scene constructors take ``&MjModel``
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRendererBuilder::<method>build` and
 :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>new` take the model as
 ``&MjModel`` (|mj_model|) instead of a generic model type.
-:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>launch_passive` no longer takes a
-``model`` parameter and uses the model of ``data``.
 
 .. code-block:: rust
 
@@ -159,14 +235,79 @@ Viewer, renderer and scene constructors take ``&MjModel``
     let viewer = MjViewer::launch_passive(model.clone(), 0)?;
     let renderer = MjRenderer::builder().build(model.clone())?;
     let scene = MjvScene::new(model.clone(), 100);
-    let cpp_viewer = unsafe { MjViewerCpp::launch_passive(model.clone(), &data, 100) };
 
     // After
     let model = Arc::new(MjModel::from_xml_string(XML).unwrap());
     let viewer = MjViewer::launch_passive(&model, 0)?;
     let renderer = MjRenderer::builder().build(&model)?;
     let scene = MjvScene::new(&model, 100);
-    let cpp_viewer = unsafe { MjViewerCpp::launch_passive(&data, 100) };
+
+
+The C++ viewer owns the simulation data
+---------------------------------------
+
+:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>launch_passive` takes the
+|mj_data| by value and no longer takes a ``model`` parameter. The model type of the data must
+implement :docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelTypeMut`. Step and sync
+the data through :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>state`.
+:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` is no longer ``unsafe``.
+Replace ``user_scn_mut`` with
+:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjCppViewerSharedState::<method>user_geoms_mut` and
+:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync_user_geoms`.
+The former method is unsafe due to the ability of users to write invalid IDs into
+:docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom`.
+``MjViewerCpp`` no longer implements ``Send`` and ``Sync``. To step the simulation in another
+thread, send a clone of the shared state to that thread and keep the viewer on the thread that
+created it.
+
+.. code-block:: rust
+
+    // Before
+    let model = MjModel::from_xml_string(XML).unwrap();
+    let mut data = MjData::new(&model);
+    let mut viewer = unsafe { MjViewerCpp::launch_passive(&model, &data, 100) };
+    while viewer.running() {
+        viewer.sync();
+        unsafe { viewer.render().unwrap() };
+        data.step();
+    }
+
+    // After
+    use mujoco_rs::util::LockUnpoison;
+
+    let model = Box::new(MjModel::from_xml_string(XML).unwrap());
+    let mut viewer = unsafe { MjViewerCpp::launch_passive(MjData::new(model), 100) };
+    let state = viewer.state().clone();
+    while viewer.running() {
+        {
+            let mut lock = state.lock_unpoison();
+            // SAFETY: the data is only stepped, never replaced.
+            unsafe { lock.data_mut() }.step();
+            lock.sync();
+        }
+        viewer.render().unwrap();
+    }
+
+
+``MjData::read_ctrl`` returns a slice
+-------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_ctrl` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_read_ctrl` return a
+``Cow<[MjtNum]>`` (:docs-rs:`~mujoco_rs::wrappers::mj_primitive::<type>MjtNum`) with one value per
+control of the actuator. To avoid heap allocation, use
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_ctrl_fixed` or
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_ctrl_into`.
+
+.. code-block:: rust
+
+    // Before
+    let value: MjtNum = data.read_ctrl(0, time, 1);
+
+    // After
+    let value: MjtNum = data.read_ctrl(0, time, 1)[0];
+    // or
+    let [value] = data.read_ctrl_fixed::<1>(0, time, 1);
 
 
 Removed ``append_cubefiles`` and ``append_textures``
@@ -246,7 +387,10 @@ for other items.
 Renaming a default class caused undefined behavior.
 
 It now implements only the new supertrait :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecElement`,
-the latter holding ``element_pointer``, ``element_mut_pointer`` and ``name``.
+the latter holding
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecElement::<tymethod>element_pointer`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecElement::<method>element_mut_pointer` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecElement::<method>name`.
 
 Code that previously relied on (or imported explicitly) ``SpecItem`` directly should
 also add an import of ``SpecElement``, in addition to updating the type bounds in generics.
@@ -272,12 +416,14 @@ Default-class members have field accessors only
 
 The member accessors of :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsDefault` now return
 handles marked with :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>InDefault`, for example
-``&mut MjsJoint<InDefault>``. These handles have no methods of
+``&mut MjsJoint<InDefault>`` (|mjs_joint|). These handles have no methods of
 :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecElement` or of the traits built on it
-(``SpecItem``, ``SpecObject``, ``FrameChild``, ``Attach``, ``UserValued``).
+(``SpecItem``, :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecObject`, ``FrameChild``,
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>Attach`,
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>UserValued`).
 
 The marker is needed to hide all the (trait) methods that aren't actually supported
-and would, prior to the change, just segment fault.
+and would, prior to the change, cause a segmentation fault.
 
 .. code-block:: rust
 
@@ -294,7 +440,7 @@ and would, prior to the change, just segment fault.
 ---------------------------------------------------------------------
 
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>contact_force` now panics when
-``contact_id >= ncon``. Use 
+``contact_id >= ncon``. Use
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_contact_force` to handle an
 invalid ID.
 
@@ -311,7 +457,9 @@ invalid ID.
 ---------------------------------------------------
 
 :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>is_compatible_with_model`
-now refuses more models, and ``MjvScene::update`` panics on such a model. If you reuse one scene
+now refuses more models, and
+:docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>update`
+panics on such a model. If you reuse one scene
 for several models, create a new scene when the check fails.
 
 .. code-block:: rust
@@ -364,7 +512,9 @@ Unsupported-object-type errors now carry the object type
     }
 
     // After
-    if let Err(MjDataError::UnsupportedObjectType(obj_type)) = data.try_object_velocity(MjtObjBase::mjOBJ_JOINT, 0, false) {
+    if let Err(MjDataError::UnsupportedObjectType(obj_type)) =
+        data.try_object_velocity(MjtObjBase::mjOBJ_JOINT, 0, false)
+    {
         println!("object type {obj_type:?}");
     }
 
@@ -372,7 +522,8 @@ Unsupported-object-type errors now carry the object type
 A model swap refuses more models
 --------------------------------
 
-:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` and ``try_swap_model``
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_swap_model`
 now refuse a model that differs in a size or in an integer table that no safe accessor writes,
 apart from the names, the paths, the buffer size, the mesh faces and hulls, the bounding volume
 and octree nodes and the values derived from floats.
@@ -390,13 +541,14 @@ Otherwise, create a new |mj_data|.
     let old = unsafe { data.swap_model_unchecked(edited) };
 
 
-Real geom and object types use base enums
------------------------------------------
+Real geom types, object types and texture roles use base enums
+--------------------------------------------------------------
 
-Model and specification fields and functions that accept only real geom types or real object
-types now use :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtGeomBase` and
-:docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtObjBase`. The object type setters of
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsSensor` and
+Model and specification fields and functions that accept only real geom types, real object
+types or real texture roles now use :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtGeomBase`,
+:docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtObjBase` and
+:docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtTextureRoleBase`, respectively.
+The object type setters of :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsSensor` and
 :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTuple` are no longer fallible.
 
 .. code-block:: rust
@@ -405,6 +557,7 @@ types now use :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtGeomBase` and
     spec.world_body_mut().add_geom().with_type(MjtGeom::mjGEOM_PLANE);
     sensor.set_objtype(MjtObj::mjOBJ_SITE)?;
     tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_GEOM])?;
+    material.set_texture(MjtTextureRole::mjTEXROLE_RGB, "wood");
     let id = model.name_to_id(MjtObj::mjOBJ_BODY, "ball");
     let name = model.id_to_name(model.sensor_objtype()[0], 0);
 
@@ -412,5 +565,6 @@ types now use :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtGeomBase` and
     spec.world_body_mut().add_geom().with_type(MjtGeomBase::mjGEOM_PLANE);
     sensor.set_objtype(MjtObjBase::mjOBJ_SITE);
     tuple.set_objtype(&[MjtObjBase::mjOBJ_BODY, MjtObjBase::mjOBJ_GEOM]);
+    material.set_texture(MjtTextureRoleBase::mjTEXROLE_RGB, "wood");
     let id = model.name_to_id(MjtObjBase::mjOBJ_BODY, "ball");
     let name = model.id_to_name(model.sensor_objtype()[0], 0);

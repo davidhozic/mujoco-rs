@@ -313,6 +313,8 @@ pub enum MjEditError {
     CompileFailed(String),
     /// MuJoCo failed to save the spec to XML.
     SaveFailed(String),
+    /// Some operation on [`MjSpec`](crate::wrappers::mj_editing::MjSpec) failed in MuJoCo.
+    OperationFailed(String),
     /// A referenced element (e.g. parent default class) was not found.
     NotFound,
     /// An element with the same name already exists.
@@ -356,6 +358,7 @@ impl fmt::Display for MjEditError {
             Self::ParseFailed(msg) => write!(f, "parse failed: {msg}"),
             Self::CompileFailed(msg) => write!(f, "compilation failed: {msg}"),
             Self::SaveFailed(msg) => write!(f, "save failed: {msg}"),
+            Self::OperationFailed(msg) => write!(f, "operation failed: {msg}"),
             Self::NotFound => write!(f, "referenced element not found"),
             Self::AlreadyExists => write!(f, "element with the same name already exists"),
             Self::UnsupportedOperation => write!(f, "this operation is not supported"),
@@ -387,6 +390,8 @@ pub enum MjModelError {
     InvalidUtf8Path,
     /// MuJoCo failed to load the model from a file, string, or buffer.
     LoadFailed(String),
+    /// MuJoCo failed to load an asset of an already constructed [`MjModel`](crate::wrappers::MjModel).
+    AssetLoadFailed(String),
     /// MuJoCo failed to save the model XML.
     SaveFailed(String),
     /// MuJoCo failed to allocate the requested structure.
@@ -447,6 +452,7 @@ impl fmt::Display for MjModelError {
             Self::InvalidUtf8Path => write!(f, "path contains invalid UTF-8"),
             Self::LoadFailed(msg) => write!(f, "model load failed: {msg}"),
             Self::SaveFailed(msg) => write!(f, "model save failed: {msg}"),
+            Self::AssetLoadFailed(msg) => write!(f, "asset load failed: {msg}"),
             Self::AllocationFailed => write!(f, "MuJoCo failed to allocate the requested structure"),
             Self::StateSliceLengthMismatch { expected, got } => {
                 write!(f, "state slice length mismatch: expected {expected}, got {got}")
@@ -464,9 +470,7 @@ impl fmt::Display for MjModelError {
                      but need at least {needed}"
                 )
             }
-            Self::IncompatibleModel { source, destination }=> write!(
-                f, "source = {source:?}, destination = {destination:?}"
-            ),
+            Self::IncompatibleModel { .. } => write!(f, "incompatible model"),
             Self::VfsError(_) => write!(f, "VFS operation failed"),
             Self::IndexOutOfBounds { id, len } => write!(
                 f,

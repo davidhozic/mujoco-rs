@@ -2,7 +2,7 @@
 use std::ffi::{CStr, CString};
 
 use super::{MjSpec, MjsBody, MjsFrame, SpecElement};
-use crate::util::checked_c_len;
+use crate::util::{checked_c_len, string_from_c};
 use crate::error::MjEditError;
 use crate::mujoco_c::*;
 
@@ -227,7 +227,7 @@ pub(crate) unsafe fn read_spec_error(spec: *mut mjSpec) -> String {
     if ptr.is_null() {
         "Unknown error".to_owned()
     } else {
-        unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned()
+        unsafe { string_from_c(ptr) }
     }
 }
 
@@ -691,7 +691,8 @@ macro_rules! nested_handle {
 
 
 /// Creates the wrapper `$handle` around the FFI struct `$raw`. It also implements the methods
-/// `info()` and `set_info()`, and the traits `Sealed` and [`SpecItem`](super::traits::SpecItem).
+/// `info()` and `set_info()`, and the traits `Sealed`, [`SpecElement`](super::traits::SpecElement),
+/// [`SpecItem`](super::traits::SpecItem) and [`UserValued`](super::traits::UserValued).
 /// The handles are deliberately neither [`Send`] nor [`Sync`].
 ///
 /// A leading `$kind with SpecObject:` also implements [`SpecObject`](super::traits::SpecObject).

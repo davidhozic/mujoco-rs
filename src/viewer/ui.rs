@@ -145,11 +145,12 @@ const FRAME_TYPE_MAP: [&str; 8] = [
 const _: () = assert!(FRAME_TYPE_MAP.len() == crate::mujoco_c::mjtFrame_::mjNFRAME as usize);
 
 /// Maps integrator modes to their string representations
-const INTEGRATOR_MAP: [&str; 4] = [
+const INTEGRATOR_MAP: [&str; 5] = [
     "Euler",
     "RK4",
     "implicit",
-    "implicitfast"
+    "implicitfast",
+    "discrete"
 ];
 
 /// Maps friction cone types to their string representations
@@ -204,7 +205,8 @@ const ENABLE_FLAGS: &[(&str, MjtEnableBit)] = &[
     ("Forward Inverse", MjtEnableBit::mjENBL_FWDINV),
     ("Inverse Discrete", MjtEnableBit::mjENBL_INVDISCRETE),
     ("Sleep", MjtEnableBit::mjENBL_SLEEP),
-    ("DiagExact", MjtEnableBit::mjENBL_DIAGEXACT)
+    ("DiagExact", MjtEnableBit::mjENBL_DIAGEXACT),
+    ("IPC", MjtEnableBit::mjENBL_IPC)
 ];
 const _: () = assert!(ENABLE_FLAGS.len() == crate::mujoco_c::mjtEnableBit::mjNENABLE as usize);
 

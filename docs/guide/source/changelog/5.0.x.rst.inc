@@ -413,8 +413,8 @@ runtime.
   ``MjtBool`` migration.
 - Added missing ``mjt*`` type aliases for recently surfaced MuJoCo enums: ``MjtMeshBuiltin``, ``MjtCTimer``.
 - Added auxiliary exposed aliases: ``MjPreContact``, ``MjfCollision``, ``MjpResourceProvider``.
-- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<tymethod>element_pointer`
-  and :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>element_mut_pointer`
+- :docs-rs:`SpecItem::element_pointer <mujoco_rs::wrappers::mj_editing::<trait>SpecElement::<tymethod>element_pointer>`
+  and :docs-rs:`SpecItem::element_mut_pointer <mujoco_rs::wrappers::mj_editing::<trait>SpecElement::<method>element_mut_pointer>`
   are no longer marked ``unsafe``.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_state`
   is no longer marked ``unsafe``. MuJoCo 3.9.0 changed ``eq_active`` to ``mjtBool``

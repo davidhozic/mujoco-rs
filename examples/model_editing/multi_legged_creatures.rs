@@ -6,7 +6,7 @@
 //! about the axis tangent to the torso perimeter.
 //!
 //! Adapted from the MuJoCo mjspec tutorial:
-//! https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb
+//! https://colab.research.google.com/github/google-deepmind/mujoco/blob/3.17.0/python/mjspec.ipynb
 
 use std::f64::consts::TAU;
 use std::time::Duration;

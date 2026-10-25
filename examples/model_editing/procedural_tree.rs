@@ -5,7 +5,7 @@
 //! Set `opt.wind` in `build_tree` to a non-zero value to make them sway.
 //!
 //! Adapted from the MuJoCo mjspec tutorial:
-//! https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb
+//! https://colab.research.google.com/github/google-deepmind/mujoco/blob/3.17.0/python/mjspec.ipynb
 
 use std::time::Duration;
 use mujoco_rs::prelude::*;
