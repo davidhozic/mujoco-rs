@@ -864,28 +864,23 @@ impl<M: ModelType> MjData<M> {
             return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id, upper: nactuator });
         }
 
-        // Either no interpolation explicitly or interpolation of method is based on the actuator setting, which is
-        // set to no interpolation => empty Vec due to mj_readCtrl always returning the pointer then.
+        // Interpolation. Mirrors mj_readCtrl.
         let dim = self.model.actuator_ctrlnum()[id] as usize;
-        let (mut interpolated_ctrl, should_return_ptr) =
-            if interp == 0 || interp < 0 &&
-                self.model.actuator_history()[id][1] == 0
-        {
-            (Vec::new(), true)
-        } else { (vec![0.0; dim], false) };
+        let [nsample, model_interp] = self.model.actuator_history()[id];
+        let resolved_interp = if interp < 0 { model_interp } else { interp };
+        let mut interpolated_ctrl = (nsample != 0 && resolved_interp != 0).then(|| vec![0.0; dim]);
 
-        // SAFETY: id < nactuator was checked. The buffer is empty when C returns a pointer and holds
+        // SAFETY: id < nactuator was checked. The buffer is null when C returns a pointer and holds
         // actuator_ctrlnum[id] elements when C interpolates into it.
         let ptr = unsafe { mj_readCtrl(
             self.model.ffi(), self.ffi(),
             id as i32, time,
-            interpolated_ctrl.as_mut_ptr(), interp
+            interpolated_ctrl.as_mut().map_or(ptr::null_mut(), |x| x.as_mut_ptr()), interp
         ) };
 
         Ok(
             if ptr.is_null() {
-                debug_assert!(!should_return_ptr, "when no interpolation exists, pointer should not be null");
-                Cow::Owned(interpolated_ctrl)
+                Cow::Owned(interpolated_ctrl.unwrap())
             }
             else {
                 // SAFETY: the pointer is not null (checked above) and the `dim` is read from the model for the specific

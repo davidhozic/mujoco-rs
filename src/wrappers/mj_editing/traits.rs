@@ -141,8 +141,8 @@ pub trait SpecObject: SpecItem {
     ///   specification holds this one.
     ///
     /// # Safety
-    /// - Delete each element at most once. MuJoCo keeps the element allocated until the
-    ///   specification drops, so a second deletion frees it twice.
+    /// - Delete each element at most once. MuJoCo frees the element during the deletion, thus a
+    ///   second deletion is use-after-free.
     /// - Do not delete an element that an earlier deletion already took out of the specification.
     ///   An iterator collected before that deletion still hands out its handle.
     /// - Do not use the handle of an element that an earlier deletion freed.

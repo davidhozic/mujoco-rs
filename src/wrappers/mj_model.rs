@@ -1335,7 +1335,7 @@ impl MjModel {
     /// Returns [`MjModelError::AssetLoadFailed`] with MuJoCo's error message when a by-reference asset
     /// does not resolve.
     pub fn to_embed_assets(&self) -> Result<MjModel, MjModelError> {
-        let mut error = [0; 500];
+        let mut error = [0; ERROR_BUF_LEN];
         // SAFETY: the ffi pointer is always valid while MjModel exists. Error length is checked and can't overflow.
         let embedded_ptr = unsafe {
             mj_embedAssets(self.ptr.as_ptr(), error.as_mut_ptr(), error.len() as i32)
@@ -1366,7 +1366,7 @@ impl MjModel {
         let mut data = ptr::null_mut();
         let mut width = 0;
         let mut height = 0;
-        let mut error = [0; 500];
+        let mut error = [0; ERROR_BUF_LEN];
         // SAFETY: ffi pointer is always valid when this function is called, id is checked for overflows,
         // null fields indicate no data and don't need to be non-null, error-array size fits in `c_int` of any size.
         let result = unsafe { mj_loadTexture(

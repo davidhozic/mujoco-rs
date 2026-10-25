@@ -630,6 +630,9 @@ impl MjSpec {
     }
 
     /// Same as [`MjSpec::fuse_static`] except it uses a virtual filesystem from which asset files are read.
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::OperationFailed`] wrapping MuJoCo's error message if the fuse fails.
     pub fn fuse_static_with_vfs(&mut self, vfs: &MjVfs) -> Result<u32, MjEditError> {
         self.fuse_static_impl(Some(vfs))
     }
@@ -641,7 +644,7 @@ impl MjSpec {
             vfs.map_or(ptr::null(), |vfs| vfs.ffi())
         ) };
 
-        if n_fused_bodies == -1 {
+        if n_fused_bodies < 0 {
             // SAFETY: error is guaranteed (by C code) to be set.
             return Err(MjEditError::OperationFailed(unsafe { read_spec_error(self.ffi.as_ptr()) }));
         }
@@ -682,7 +685,7 @@ impl MjSpec {
             vfs.map_or(ptr::null(), |vfs| vfs.ffi())
         ) };
 
-        if n_discarded_visual == -1 {
+        if n_discarded_visual < 0 {
             // SAFETY: error is guaranteed (by C code) to be set.
             return Err(MjEditError::OperationFailed(unsafe { read_spec_error(self.ffi.as_ptr()) }));
         }
