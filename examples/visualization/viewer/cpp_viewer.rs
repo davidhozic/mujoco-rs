@@ -1,12 +1,13 @@
 //! Example of the native C++ viewer wrapper.
 //! This can only be run in passive mode, which means the user program is the one
 //! controlling everything.
-use std::time::Duration;
-
 use mujoco_rs::cpp_viewer::MjViewerCpp;
+use mujoco_rs::util::LockUnpoison;
 use mujoco_rs::prelude::*;
+
 use env_logger::Env;
 
+use std::time::Duration;
 
 const EXAMPLE_MODEL: &str = "
 <mujoco>
@@ -29,15 +30,21 @@ fn main() {
     // SAFETY: no other thread uses MuJoCo yet.
     unsafe { install_logging_hook() };
 
-    let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
-    let mut data = MjData::new(&model);  // or model.make_data()
-    let mut viewer = unsafe { MjViewerCpp::launch_passive(&model, &data, 100) };
+    let model = Box::new(MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model"));
     let step = model.opt().timestep;
+
+    // SAFETY: called from the main thread.
+    let mut viewer = unsafe { MjViewerCpp::launch_passive(MjData::new(model), 100) };
+    let state = viewer.state().clone();
+
     while viewer.running() {
-        viewer.sync();
-        // SAFETY: called from the main thread.
-        unsafe { viewer.render().unwrap() };
-        data.step();
-        std::thread::sleep(Duration::from_secs_f64(step));
+        {
+            let mut lock = state.lock_unpoison();
+            unsafe { lock.data_mut() }.step();
+            lock.sync();
+            std::thread::sleep(Duration::from_secs_f64(step));
+        }
+
+        viewer.render().unwrap();
     }
 }

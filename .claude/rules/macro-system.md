@@ -86,26 +86,34 @@ macro**:
   a read before its computing stage reads uninitialized memory. The caller runs the stage first.
 - `(allow_mut = false)` in **`getter_setter!`**: suppresses `field_mut()` entirely.
 
-**Safety criterion**: a field whose VALUES are used by C as unguarded array INDICES
-(`arr[field[i]]` with no upper-bound check) needs `(mut = unsafe)` at minimum. Pure numeric data
-(forces, positions, velocities, matrices) is always safe to mutate.
+**`(mut = unsafe)` criterion**: C uses the field's VALUES as unguarded indices, offsets, lengths
+or discriminants (`arr[field[i]]` with no upper-bound check, or only a `>= 0` guard). Pure numeric
+data (forces, positions, velocities, matrices) is safe to mutate. A field that C rewrites before
+every read stays safe.
 
-**Known `(mut = unsafe)` fields**: `contact` (`mj_sensorAcc()` indexes `geom_bodyid[]` with only a
-`>= 0` guard), `flexedge` and `geoms` (`render_gl3.c` vertex/material indices without bounds
-checks). **Known safe**: `geomorder` (`mjr_render()` repopulates it before reading).
+**`(read = unsafe)` criterion**: an `mjData` arena array that MuJoCo allocates in one stage and
+fills in a later stage, or fills only under some option. The arena is NEVER zeroed (`mju_malloc`,
+and a reset only sets `parena = 0`); a fresh read of zero is only the kernel handing out zero pages.
+For a numeric field the `_mut` accessor is unsafe only because `&mut [T]` also allows reads; do not
+read that as an index hazard.
 
-**Known `(read = unsafe)` fields** (all on `MjData`, all arena-allocated): `efc_state`, `efc_force`,
-`efc_b`, `iefc_state`, `iefc_force`, `iefc_aref`, `iacc`, `iacc_smooth`, `ifrc_smooth` and
-`ifrc_constraint` need `forward()`/`step2()`; `efc_vel` and `efc_aref` need `step1()` or later;
-`efc_J_rownnz`, `efc_J_rowadr`, `efc_J_rowsuper`, `efc_J_colind` are filled only when
-`opt.jacobian` resolves to sparse, so a dense model leaves them uninitialized forever. The four
-island dof arrays stay uninitialized after `forward()` when `opt.solver` is `PGS`, because only the
-CG and Newton island paths gather into them.
-The arena comes from `mju_malloc` and `_resetData` only sets `parena = 0`, so it is NEVER zeroed;
-do not assume a fresh read is zero, because that is only the kernel handing out zero pages.
+**How to decide.** Trace the C source, not the header comment:
 
-When adding or reviewing an `array_slice_dyn!` invocation, trace how C uses the field's VALUES
-before choosing the prefix.
+1. Find the allocation (`mj_arenaAlloc*`, a module-local arena macro) and the pipeline stage that
+   runs it (e.g., `mj_fwdPosition`, `mj_fwdVelocity`, `mj_fwdActuation`, `mj_fwdAcceleration`,
+   `mj_fwdConstraint`, `mj_inverse`).
+2. Find every writer. Note whether it fills the whole length the accessor exposes, or only a
+   counted prefix, and in which stage it runs.
+3. Check the conditions on each writer (e.g., `opt.solver`, `opt.jacobian`, `opt.integrator`, enable and
+   disable flags). A branch that skips the fill leaves the array uninitialized.
+4. Check what the pointer holds when the array is not built: `mj_clearEfc` sets arena pointers to
+   NULL, and the accessor then returns `&[]`.
+5. Check the length field. A count that the same stage sets together with the values (`nefmA`
+   with the actuator arrays) keeps the slice initialized.
+6. Check for packed buffers: a numeric array can carry an integer layout in its tail. Such a field
+   is unsafe both to read and to mutate.
+7. Trace how C uses the VALUES (indices, loop bounds, divisors) to choose `(mut = unsafe)`.
+8. Other unwritten rules.
 
 ### `view_creator!(field, start_ffi_field, data_ptr, type_)`
 Generates `fn field(&self) -> &[T]` and the `_mut` variant via `(offset, len)` and

@@ -11,7 +11,7 @@ unnecessary_lazy_evaluations = "allow"
 
 [package]
 name = "mujoco-rs"
-version = "6.1.0+mj-3.12.0"
+version = "7.0.0+mj-3.17.0"
 edition = "2024"
 license.workspace = true
 description = "A high-level Rust wrapper around the MuJoCo C library, with a native viewer (re-)written in Rust."
@@ -65,6 +65,11 @@ required-features = ["viewer-ui"]
 [[example]]
 name = "cpp_viewer"
 path = "examples/visualization/viewer/cpp_viewer.rs"
+required-features = ["cpp-viewer"]
+
+[[example]]
+name = "cpp_viewer_threaded"
+path = "examples/visualization/viewer/cpp_viewer_threaded.rs"
 required-features = ["cpp-viewer"]
 
 [[example]]

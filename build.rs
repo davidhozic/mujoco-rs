@@ -7,14 +7,29 @@ use std::env;
 
 #[cfg(feature = "ffi-regenerate")]
 mod build_dependencies {
-    use bindgen::callbacks::{ParseCallbacks, DeriveInfo};
+    use bindgen::callbacks::{DeriveInfo, EnumVariantValue, ParseCallbacks};
     use super::*;
-    use std::fs;
+    use std::{cell::RefCell, collections::{BTreeMap, BTreeSet}, fs, rc::Rc};
+
+    /// The safe variants (name and value) of each enum, in declaration order.
+    type EnumSafeVariants = Rc<RefCell<BTreeMap<String, Vec<(String, u64)>>>>;
 
     #[derive(Debug)]
-    struct CloneCallback;
+    struct BindgenOverrides {
+        /// The variants of each enum that come before its count variant (e.g., `mjNOBJECT`).
+        /// RefCell due to bindgen API limits.
+        enum_safe_variants: EnumSafeVariants,
+        /// The enums whose count variant was already seen, thus no later variant is safe.
+        enum_safe_exhausted: RefCell<BTreeSet<String>>,
+    }
 
-    impl ParseCallbacks for CloneCallback {
+    impl BindgenOverrides {
+        fn new(enum_safe_variants: EnumSafeVariants) -> Self {
+            Self { enum_safe_variants, enum_safe_exhausted: RefCell::new(BTreeSet::new()) }
+        }
+    }
+
+    impl ParseCallbacks for BindgenOverrides {
         fn add_derives(&self, info: &DeriveInfo) -> Vec<String> {
             // mjs* types: omit Clone because unsafe impl Send + Clone on
             // pointer-containing types is unsound -- clones share aliased raw
@@ -47,6 +62,40 @@ mod build_dependencies {
             data
         }
 
+        fn enum_variant_behavior(
+            &self,
+            enum_name: Option<&str>,
+            original_variant_name: &str,
+            variant_value: bindgen::callbacks::EnumVariantValue,
+        ) -> Option<bindgen::callbacks::EnumVariantCustomBehavior>
+        {
+            let enum_name = enum_name.and_then(|n| n.strip_prefix("enum "))?;
+            let mut borrow_safe_variants = self.enum_safe_variants.borrow_mut();
+            let mut borrow_exhausted = self.enum_safe_exhausted.borrow_mut();
+
+            let count_variant = match enum_name {
+                "mjtGeom"  => "mjNGEOMTYPES",
+                "mjtObj"   => "mjNOBJECT",
+                "mjtTextureRole" => "mjNTEXROLE",
+                _ => return None,
+            };
+
+            if original_variant_name == count_variant {
+                borrow_exhausted.insert(enum_name.to_string());
+            }
+            else if !borrow_exhausted.contains(enum_name) {
+                let value = match variant_value {
+                    EnumVariantValue::Boolean(v) => v as u64,
+                    EnumVariantValue::Unsigned(v) => v,
+                    EnumVariantValue::Signed(v) => v as u64
+                };
+
+                borrow_safe_variants.entry(enum_name.to_string()).or_default()
+                    .push((original_variant_name.to_string(), value));
+            }
+
+            None
+        }
     }
 
 
@@ -55,6 +104,10 @@ mod build_dependencies {
         let current_dir = env::current_dir().unwrap();
         let include_dir_mujoco = current_dir.join("mujoco/include/mujoco");
 
+        // The variants of each enum that come before its count variant. These form the base enums.
+        let enum_safe_variants = Rc::new(RefCell::new(BTreeMap::new()));
+
+        // Generate bindings
         let bindings_mujoco = bindgen::Builder::default()
             .header(include_dir_mujoco.join("mujoco.h").to_str().unwrap())
             .clang_arg(format!("-I{}", include_dir_mujoco.display()))
@@ -68,7 +121,7 @@ mod build_dependencies {
             // Instead of ffi function bindings containing raw pointers to a scalar type,
             // they now contain raw pointers to arrays of fixed size.
             .array_pointers_in_arguments(true)
-            .parse_callbacks(Box::new(CloneCallback))
+            .parse_callbacks(Box::new(BindgenOverrides::new(enum_safe_variants.clone())))
             /* Generate (C API only) */
             .generate()
             .expect("unable to generate MuJoCo bindings");
@@ -118,8 +171,8 @@ mod build_dependencies {
         const WRAPPED_STRUCTS: [&str; 6] =
             ["mjModel_", "mjData_", "mjvScene_", "mjrContext_", "mjVFS_", "mjSpec_"];
         // mjpResourceProvider has a bare `pub type MjpResourceProvider` alias but no safe API
-        // consumes/produces it (the only consumer is the unwrapped unsafe FFI
-        // mjp_registerResourceProvider) and it has no accessors, so it is reachable only through
+        // consumes/produces it (only unwrapped unsafe FFI such as mjp_registerProvider and
+        // mj_mountVFS uses it) and it has no accessors, so it is reachable only through
         // unsafe FFI -- treat it as internal and keep its (pointer) fields public.
         const INTERNAL_STRUCTS: [&str; 9] = [
             "mjCache_", "mjpDecoder", "mjpEncoder", "mjpPlugin_",
@@ -171,6 +224,26 @@ mod build_dependencies {
             &fdata,
             "#[cfg_attr(feature = \"viewer\", derive(mujoco_rs_derive::ThreeWayMerge))]\n$1$2",
         ).to_string();
+
+        /* Extra enumerated variants and their enums */
+        let enum_safe_variants = enum_safe_variants.take();
+        let extra_enums: String = enum_safe_variants.into_iter()
+            .map(|(k, v)|
+                format!(
+                    "\n#[repr(u32)]\n\
+                    #[derive(Debug, Clone, Hash, PartialEq, Eq, Copy)]\n\
+                    pub enum _{k}Base {{\n\
+                        {}\
+                    }}\n", v.into_iter().map(|(name, value)| format!("    {name} = {value},\n")).collect::<String>())
+            )
+            .collect();
+
+        fdata += "\n/* Some enums contain extra variants that can be used in some specific context but would cause\n\
+                       unsafety, undefined-behavior or out-of-bound reads if used incorrectly.\n\
+                       These enums contain variants that are safe to use in all contexts.\n\
+                       The following enums are not part of the actual C API directly and are\n\
+                       generated by build.rs instead. */";
+        fdata += &extra_enums;
 
         fs::write(outputfile_dir, fdata).unwrap();
     }
@@ -246,7 +319,6 @@ fn main() {
         }
 
         println!("cargo::rustc-link-lib=static=mujoco");
-        println!("cargo::rustc-link-lib=static=lodepng");
         println!("cargo::rustc-link-lib=static=tinyxml2");
         println!("cargo::rustc-link-lib=static=qhullstatic_r");
         println!("cargo::rustc-link-lib=static=ccd");

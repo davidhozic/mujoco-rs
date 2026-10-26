@@ -583,7 +583,7 @@
   now reports ``UnsupportedOperation`` and
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_name` panics. A wrap
   carries no name of its own:
-  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>name` reports the wrapped
+  :docs-rs:`name <mujoco_rs::wrappers::mj_editing::<trait>SpecElement::<method>name>` reports the wrapped
   object's name.
 - Closed a heap over-read reachable from safe code in
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compile`. It now rejects a

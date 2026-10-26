@@ -12,25 +12,24 @@ use crate::mujoco_c::*;
 /// crate from the keys that another language writes on the same element.
 const USER_VALUE_KEY_PREFIX: &str = "mujoco-rs:";
 
-use super::{MjSpec, MjsBody, MjsFrame, MjsSite};
+use super::{MjSpec, MjsBody, MjsFrame, MjsSite, MjsJoint, MjsGeom, MjsCamera, MjsLight};
 use super::default::MjsDefault;
 use super::utility::*;
 
 pub(crate) mod sealed {
-    /// Prevents external implementations of [`SpecItem`](super::SpecItem) and
-    /// [`AttachTo`](super::AttachTo).
+    /// Prevents external implementations.
     pub trait Sealed {}
 }
 
-/// Every type that [`MjSpec`](super::MjSpec) supports. Sealed.
-pub trait SpecItem: Sized + sealed::Sealed {
+/// Every model-editing element that [`MjSpec`](super::MjSpec) supports. Sealed.
+pub trait SpecElement: Sized + sealed::Sealed {
     /// Returns the `mjsElement` that MuJoCo keeps behind the item.
     ///
     /// The pointer is const. A caller that must satisfy MJS's wrong use of mutable pointers, such
     /// as [`mjs_getName`], casts it at the call site.
     fn element_pointer(&self) -> *const mjsElement;
 
-    /// Same as [`SpecItem::element_pointer`], but with a mutable borrow and a mutable pointer.
+    /// Same as [`SpecElement::element_pointer`], but with a mutable borrow and a mutable pointer.
     fn element_mut_pointer(&mut self) -> *mut mjsElement {
         self.element_pointer() as *mut _
     }
@@ -44,19 +43,21 @@ pub trait SpecItem: Sized + sealed::Sealed {
         // takes a mutable pointer but writes nothing.
         unsafe { read_mjs_string(mjs_getName(self.element_pointer() as *mut _)) }
     }
+}
 
+/// Extension of [`SpecElement`] for elements with:
+/// - a default class;
+/// - ability to change the name post instantiation;
+/// - an ID ([`mjs_getId`]).
+pub trait SpecItem: SpecElement {
     /// Set a new name.
     /// # Errors
     /// Returns [`MjEditError::AlreadyExists`] when an element with the same name already exists.
     /// # Panics
     /// When the `name` contains '\0' characters mid string, a panic occurs.
     fn set_name(&mut self, name: &str) -> Result<(), MjEditError> {
-        let cstr = CString::new(name).unwrap();  // panics on interior NUL bytes; &str guarantees UTF-8
-        let result = unsafe { mjs_setName(self.element_mut_pointer(), cstr.as_ptr()) };
-        if result != 0 {
-            return Err(MjEditError::AlreadyExists);
-        }
-        Ok(())
+        // SAFETY: the item is a live element of its specification.
+        unsafe { set_element_name(self.element_mut_pointer(), name) }
     }
 
     /// Builder style set a new name.
@@ -69,8 +70,8 @@ pub trait SpecItem: Sized + sealed::Sealed {
 
     /// Returns the used default, or `None` when the element carries no default class name.
     ///
-    /// Only a body, joint, geom, site, camera, light, actuator, pair, equality, tendon, mesh or
-    /// material can carry one. Every other element, a frame included, returns `None`.
+    /// For a frame, this is the default of its child class. After a successful
+    /// [`set_default`](Self::set_default), the element returns `Some`.
     fn default(&self) -> Option<&MjsDefault> {
         let ptr = unsafe { mjs_getDefault(self.element_pointer()) };
         // SAFETY: a non-null return points to the mjsDefault owned by a live mjCDef of the spec.
@@ -117,7 +118,7 @@ pub trait SpecItem: Sized + sealed::Sealed {
 
 /// A [`SpecItem`] that becomes a concrete object inside
 /// [`crate::wrappers::mj_model::MjModel`] once [`super::MjSpec`] compiles. That is every
-/// [`SpecItem`] except [`MjsDefault`] and [`MjsWrap`](super::MjsWrap). Only such an object carries
+/// [`SpecItem`] except [`MjsWrap`](super::MjsWrap). Only such an object carries
 /// [`SpecObject::delete`].
 pub trait SpecObject: SpecItem {
     /// The `mjtObj` discriminant passed to `mjs_firstElement` / `mjs_firstChild`.
@@ -131,20 +132,20 @@ pub trait SpecObject: SpecItem {
 
     /// Delete the element from the specification that holds it.
     ///
-    /// Deleting a body deletes its subtree, and frees every keyframe, and every actuator, sensor,
-    /// tendon, equality, pair and exclude that refers to the subtree.
+    /// Deleting a body or a frame deletes its subtree, and frees every actuator, sensor, tendon,
+    /// equality, pair and exclude that refers to the subtree.
     ///
     /// # Errors
-    /// - [`MjEditError::UnsupportedOperation`] if the element is a frame or the world body.
+    /// - [`MjEditError::UnsupportedOperation`] if the element is the world body.
     /// - [`MjEditError::DeleteFailed`] if MuJoCo refuses the deletion, which it does while another
     ///   specification holds this one.
     ///
     /// # Safety
-    /// - Delete each element at most once. MuJoCo keeps the element allocated until the
-    ///   specification drops, so a second deletion frees it twice.
-    /// - Do not delete an element that the deletion of a body already took out of the
-    ///   specification. An iterator collected before that deletion still hands out its handle.
-    /// - Do not use the handle of an element that the deletion of a body freed.
+    /// - Delete each element at most once. MuJoCo frees the element during the deletion, thus a
+    ///   second deletion is use-after-free.
+    /// - Do not delete an element that an earlier deletion already took out of the specification.
+    ///   An iterator collected before that deletion still hands out its handle.
+    /// - Do not use the handle of an element that an earlier deletion freed.
     ///
     /// # Examples
     /// ```
@@ -537,6 +538,61 @@ impl Attach for MjsBody {}
 impl Attach for MjsFrame {}
 impl Attach for MjsSite {}
 
+/// Represents things that can be children of a frame.
+pub trait FrameChild: SpecItem {
+    /// Puts the spec item/element into a parent frame, named `frame_name`.
+    /// Wraps [`mjs_setFrame`].
+    ///
+    /// <div class="warning">
+    /// This method does not check for cycles. Creating one will result in a stack overflow.
+    /// </div>
+    ///
+    /// # Errors
+    /// - [`MjEditError::NotFound`] when `frame_name` is empty or no frame has that name.
+    /// - [`MjEditError::FrameParentMismatch`] when the frame belongs to a different body
+    ///   than the one this spec item/element is in.
+    ///
+    /// # Panics
+    /// When the `frame_name` contains '\0' characters, a panic occurs.
+    ///
+    /// # Example
+    /// ```
+    /// # use mujoco_rs::prelude::*;
+    /// let mut spec = MjSpec::new();
+    /// let world = spec.world_body_mut();
+    /// world.add_frame().with_name("f").with_pos([1.0, 0.0, 0.0]);
+    /// world.add_geom().with_size([0.1, 0.0, 0.0]).set_frame("f").unwrap();
+    /// assert_eq!(spec.compile().unwrap().geom_pos()[0], [1.0, 0.0, 0.0]);
+    /// ```
+    fn set_frame(&mut self, frame_name: &str) -> Result<(), MjEditError> {
+        // SAFETY: the item is a live element of its specification.
+        let frame = unsafe { find_frame(self.element_pointer(), frame_name) }?;
+        // mjs_setFrame fails only when the frame and the item have different parent bodies.
+        if unsafe { mjs_setFrame(self.element_mut_pointer(), frame) } != 0 {
+            return Err(MjEditError::FrameParentMismatch);
+        }
+        Ok(())
+    }
+
+    /// Builder style [`FrameChild::set_frame`].
+    /// # Errors
+    /// Same as [`FrameChild::set_frame`].
+    /// # Panics
+    /// When the `frame_name` contains '\0' characters, a panic occurs.
+    fn with_frame(&mut self, frame_name: &str) -> Result<&mut Self, MjEditError> {
+        self.set_frame(frame_name)?;
+        Ok(self)
+    }
+}
+
+impl FrameChild for MjsBody {}
+impl FrameChild for MjsFrame {}
+impl FrameChild for MjsJoint {}
+impl FrameChild for MjsGeom {}
+impl FrameChild for MjsSite {}
+impl FrameChild for MjsCamera {}
+impl FrameChild for MjsLight {}
+
 /// Attaches the `child` element to the `parent` element. `deep_copy` selects whether the parent
 /// deep-copies the elements of the child or "copies" by-reference.
 /// Wraps [`mjs_attach`].
@@ -640,21 +696,5 @@ mod tests {
             geom.set_user_value("key", Box::new(DropCounter(Rc::clone(&drops))));
         }
         assert_eq!(drops.get(), 3, "dropping the spec must drop the value it holds");
-    }
-
-    #[test]
-    fn test_user_value_dropped_on_element_delete() {
-        let drops = Rc::new(Cell::new(0));
-        {
-            let mut spec = MjSpec::new();
-            let geom = spec.world_body_mut().add_geom();
-            geom.set_user_value("key", Box::new(DropCounter(Rc::clone(&drops))));
-
-            // SAFETY: the borrow of the geom ends with the call, so no handle reaches the element
-            // after its deletion.
-            unsafe { geom.delete() }.unwrap();
-            assert_eq!(drops.get(), 0, "memory is supposed to be freed after the spec is dropped");
-        }
-        assert_eq!(drops.get(), 1, "the spec must drop the value a deleted element held");
     }
 }

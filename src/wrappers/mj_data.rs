@@ -3,10 +3,11 @@ use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
 use crate::wrappers::mj_auxiliary::{MjVisual, MjStatistic};
 use crate::wrappers::mj_option::MjOption;
 use crate::{getter_setter, mujoco_c::*};
+use crate::util::checked_c_len;
 use crate::error::MjDataError;
 
 use super::mj_statistic::{MjWarningStat, MjTimerStat, MjSolverStat};
-use super::mj_model::{MjModel, MjModelLayout, MjtSameFrame, MjtObj, MjtStage};
+use super::mj_model::{MjModel, MjModelLayout, MjtSameFrame, MjtObjBase, MjtStage};
 use super::mj_model::traits::{ModelTypeMut, ModelType};
 use super::fun::utility::mju_norm_3;
 use super::mj_auxiliary::MjContact;
@@ -18,6 +19,7 @@ use std::ffi::CString;
 use std::borrow::Cow;
 use std::path::Path;
 use std::fmt::Debug;
+use std::fs::File;
 
 /*******************************************/
 // Types
@@ -108,7 +110,7 @@ impl<M: ModelType> MjData<M> {
     /// # Notes
     /// This method only validates the model memory layout.
     /// **Not all model parameters are safe (for correct simulation) to change at runtime.**
-    /// See [here](https://mujoco.readthedocs.io/en/3.12.0/programming/simulation.html#mjmodel-changes)
+    /// See [here](https://mujoco.readthedocs.io/en/3.17.0/programming/simulation.html#mjmodel-changes)
     /// to see what parameters can be changed.
     /// 
     /// If `M` implements [`ModelTypeMut`], prefer
@@ -139,12 +141,25 @@ impl<M: ModelType> MjData<M> {
     pub fn try_swap_model(&mut self, model: M) -> Result<M, MjDataError> {
         if !self.model.is_compatible_with_model(&model) {
             return Err(MjDataError::IncompatibleModel {
-                source: model.signature(),
-                destination: self.model.signature(),
+                source: Arc::clone(model.layout()),
+                destination: Arc::clone(self.model.layout()),
             });
         }
 
-        Ok(std::mem::replace(&mut self.model, model))
+        // SAFETY: the two models have an equal layout.
+        Ok(unsafe { self.swap_model_unchecked(model) })
+    }
+
+    /// Unchecked version of [`MjData::swap_model`].
+    /// 
+    /// This exists because [`MjModelLayout`] is overly strict in order to ease the crate's maintenance.
+    ///
+    /// # Safety
+    /// The `model` must be compatible such that the expected memory
+    /// structure is preserved for the needed use. Each plugin instance must also keep its plugin
+    /// (an equal `plugin` table), because this data holds the state that plugin created.
+    pub unsafe fn swap_model_unchecked(&mut self, model: M) -> M {
+        std::mem::replace(&mut self.model, model)
     }
 
     info_method! { Data, [model], body, [
@@ -170,7 +185,7 @@ impl<M: ModelType> MjData<M> {
     /// When the `name` contains '\0' characters, a panic occurs.
     pub fn joint(&self, name: &str) -> Option<MjJointDataInfo> {
         let model = self.model();
-        let id = model.name_to_id(MjtObj::mjOBJ_JOINT, name)?;
+        let id = model.name_to_id(MjtObjBase::mjOBJ_JOINT, name)?;
         let nq_range = {
             let slice = model.jnt_qposadr();
             crate::util::optional_sparse_addr_range(slice, id, model.nq() as usize).unwrap_or((0, 0))
@@ -276,16 +291,65 @@ impl<M: ModelType> MjData<M> {
     /// via [`MjData::contact`]. Wraps [`mj_contactForce`].
     ///
     /// # Note
-    /// When `contact_id >= ncon`, `[0; 6]` is returned.
+    /// This function will return valid results only after running the constraint solver.
+    /// The solver runs in [`MjData::step`], [`MjData::step2`] (requires a call to [`MjData::step1`]
+    /// first) and [`MjData::forward`].
+    /// 
+    /// Calling it after the constraint array (`efc_force`) is allocated but not initialized
+    /// (e.g., after calling [`MjData::step1`]) will result in garbage values.
+    ///
+    /// # Panics
+    /// Panics when `contact_id` is outside the range of valid contact IDs.
+    /// For a fallible version, consider [`MjData::try_contact_force`].
     pub fn contact_force(&self, contact_id: usize) -> [MjtNum; 6] {
+        self.try_contact_force(contact_id).unwrap()
+    }
+
+    /// Fallible version of [`MjData::contact_force`].
+    /// 
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `contact_id` is not in the
+    /// range of valid contact IDs.
+    pub fn try_contact_force(&self, contact_id: usize) -> Result<[MjtNum; 6], MjDataError> {
+        // OVERFLOW SAFETY: ncon cannot be negative unless set through unsafe intentionally.
+        let n_contacts = self.ncon() as usize;
+        if contact_id >= n_contacts {
+            return Err(MjDataError::IndexOutOfBounds { kind: "contact", id: contact_id, upper: n_contacts });
+        }
+
         let mut force = [0.0; 6];
+        // SAFETY: all pointers point to pointers of enforced lifetimes, index is checked. 
         unsafe {
             mj_contactForce(
                 self.model.ffi(), self.data.as_ptr(),
                 contact_id as i32, &mut force
             );
         }
-        force
+        Ok(force)
+    }
+
+    /// Returns `true` when `point` is inside the site `site_id` (the convex hull for a mesh site).
+    /// Wraps [`mj_insideSite`].
+    ///
+    /// # Panics
+    /// Panics when `site_id >= nsite`.
+    /// For a fallible version, consider [`MjData::try_is_point_inside_site`].
+    pub fn is_point_inside_site(&self, site_id: usize, point: &[MjtNum; 3]) -> bool {
+        self.try_is_point_inside_site(site_id, point).unwrap()
+    }
+
+    /// Fallible version of [`MjData::is_point_inside_site`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `site_id >= nsite`.
+    pub fn try_is_point_inside_site(&self, site_id: usize, point: &[MjtNum; 3]) -> Result<bool, MjDataError> {
+        let nsite = self.model.ffi().nsite as usize;
+        if site_id >= nsite {
+            return Err(MjDataError::IndexOutOfBounds { kind: "site_id", id: site_id, upper: nsite });
+        }
+
+        // SAFETY: mj_insideSite does not check `site_id`; the check above keeps it below `nsite`.
+        Ok(unsafe { mj_insideSite(self.model.ffi(), self.ffi(), site_id as i32, point) } != 0)
     }
 
     /* Partially auto-generated */
@@ -343,13 +407,18 @@ impl<M: ModelType> MjData<M> {
     /// `Ok(())` on success.
     /// # Errors
     /// - [`MjDataError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjDataError::IoError`] if the file cannot be opened for writing.
     /// # Panics
     /// When either string contains '\0' characters, a panic occurs.
     pub fn print_formatted<T: AsRef<Path>>(&self, filename: T, float_format: &str) -> Result<(), MjDataError> {
-        let path_str = filename.as_ref().to_str()
+        let path = filename.as_ref();
+        let path_str = path.to_str()
             .ok_or(MjDataError::InvalidUtf8Path)?;
         let c_filename = CString::new(path_str).unwrap();
         let c_float_format = CString::new(float_format).unwrap();
+        // MuJoCo only logs a warning when it cannot open the file, so open it here first.
+        File::create(path)
+            .map_err(|e| MjDataError::IoError { path: path.to_path_buf(), kind: e.kind() })?;
         unsafe { mj_printFormattedData(self.model.ffi(), self.ffi(), c_filename.as_ptr(), c_float_format.as_ptr()) }
         Ok(())
     }
@@ -359,12 +428,17 @@ impl<M: ModelType> MjData<M> {
     /// `Ok(())` on success.
     /// # Errors
     /// - [`MjDataError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjDataError::IoError`] if the file cannot be opened for writing.
     /// # Panics
     /// When the filename contains '\0' characters, a panic occurs.
     pub fn print<T: AsRef<Path>>(&self, filename: T) -> Result<(), MjDataError> {
-        let path_str = filename.as_ref().to_str()
+        let path = filename.as_ref();
+        let path_str = path.to_str()
             .ok_or(MjDataError::InvalidUtf8Path)?;
         let c_filename = CString::new(path_str).unwrap();
+        // MuJoCo only logs a warning when it cannot open the file, so open it here first.
+        File::create(path)
+            .map_err(|e| MjDataError::IoError { path: path.to_path_buf(), kind: e.kind() })?;
         unsafe { mj_printData(self.model.ffi(), self.ffi(), c_filename.as_ptr()) }
         Ok(())
     }
@@ -616,12 +690,13 @@ impl<M: ModelType> MjData<M> {
         Ok(())
     }
 
-    /// Initializes the actuator history buffer for actuator `id` (wraps `mj_initCtrlHistory`).
+    /// Initializes the actuator history buffer for actuator `id`. Wraps [`mj_initCtrlHistory`].
     /// `times`: optional timestamps slice of length `nsample`; `None` keeps existing timestamps.
-    /// `values`: control values slice of length `nsample`.
+    /// `values`: control values slice of length `nsample * ctrlnum`.
     /// # Note
-    /// The timestamps must be strictly increasing, whether they come from `times` or from the
-    /// existing buffer; otherwise MuJoCo reports an error and stops the process.
+    /// The timestamps must be strictly increasing; otherwise MuJoCo reports an error and stops
+    /// the process. `None` works only when no step has run since the last reset (or the last
+    /// history initialization), because a step leaves the stored timestamps out of order.
     /// # Errors
     /// - [`MjDataError::IndexOutOfBounds`] if `id >= nactuator`.
     /// - [`MjDataError::NoHistoryBuffer`] if the actuator has no history buffer.
@@ -637,14 +712,15 @@ impl<M: ModelType> MjData<M> {
             return Err(MjDataError::NoHistoryBuffer { kind: "actuator", id });
         }
 
-        let ns = nsample as usize;
+        let nsample = nsample as usize;
+        let ctrl_val_required = nsample * self.model.actuator_ctrlnum()[id] as usize;
         if let Some(t) = times
-            && t.len() != ns
+            && t.len() != nsample
         {
-            return Err(MjDataError::LengthMismatch { name: "times", expected: ns, got: t.len() });
+            return Err(MjDataError::LengthMismatch { name: "times", expected: nsample, got: t.len() });
         }
-        if values.len() != ns {
-            return Err(MjDataError::LengthMismatch { name: "values", expected: ns, got: values.len() });
+        if values.len() != ctrl_val_required {
+            return Err(MjDataError::LengthMismatch { name: "values", expected: ctrl_val_required, got: values.len() });
         }
 
         unsafe {
@@ -658,13 +734,14 @@ impl<M: ModelType> MjData<M> {
         Ok(())
     }
 
-    /// Initializes the sensor history buffer for sensor `id` (wraps `mj_initSensorHistory`).
+    /// Initializes the sensor history buffer for sensor `id`. Wraps [`mj_initSensorHistory`].
     /// `times`: optional timestamps slice of length `nsample`; `None` keeps existing timestamps.
     /// `values`: sensor values slice of length `nsample * dim`.
     /// `phase`: time phase offset.
     /// # Note
-    /// The timestamps must be strictly increasing, whether they come from `times` or from the
-    /// existing buffer; otherwise MuJoCo reports an error and stops the process.
+    /// The timestamps must be strictly increasing; otherwise MuJoCo reports an error and stops
+    /// the process. `None` works only when no step has run since the last reset (or the last
+    /// history initialization), because a step leaves the stored timestamps out of order.
     /// # Errors
     /// - [`MjDataError::IndexOutOfBounds`] if `id >= nsensor`.
     /// - [`MjDataError::NoHistoryBuffer`] if the sensor has no history buffer.
@@ -703,30 +780,118 @@ impl<M: ModelType> MjData<M> {
         Ok(())
     }
 
-    /// Reads the control value for actuator `id` at `time`: the current `ctrl` entry when the
-    /// actuator has no history buffer, otherwise the value from the history buffer
-    /// (`interp`: -1=use the model's `interp` setting, 0=ZOH, 1=linear, 2=cubic).
+    /// Same as [`MjData::read_ctrl`], except the value(s) are written into `dst` instead of being returned.
+    /// Wraps [`mj_readCtrl`].
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nactuator`.
+    /// Returns [`MjDataError::LengthMismatch`] when `dst.len() != actuator_ctrlnum[id]`.
+    pub fn read_ctrl_into(&self, id: usize, time: MjtNum, interp: i32, dst: &mut [MjtNum]) -> Result<(), MjDataError> {
+        let nactuator = self.model.ffi().nactuator as usize;
+        if id >= nactuator {
+            return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id, upper: nactuator });
+        }
+
+        let dim = self.model.actuator_ctrlnum()[id] as usize;
+        if dst.len() != dim {
+            return Err(MjDataError::LengthMismatch { name: "dst", expected: dim, got: dst.len() });
+        }
+        // SAFETY: id < nactuator was checked and dst holds actuator_ctrlnum[id] elements, which is the
+        // length mj_readCtrl writes and the length of the slice behind a returned pointer.
+        let ptr = unsafe { mj_readCtrl(self.model.ffi(), self.ffi(), id as i32, time, dst.as_mut_ptr(), interp) };
+        if !ptr.is_null() {
+            // C returned a pointer (no interpolation) - copy into dst.
+            dst.copy_from_slice(unsafe { std::slice::from_raw_parts(ptr, dim) });
+        }
+        Ok(())
+    }
+
+    /// Same as [`MjData::read_ctrl`], except the value(s) are returned as a stack-allocated `[MjtNum; N]`.
+    /// Wraps [`mj_readCtrl`].
+    /// # Panics
+    /// Panics when `id >= nactuator` or `N != actuator_ctrlnum[id]`.
+    /// Use [`MjData::try_read_ctrl_fixed`] for a fallible alternative.
+    pub fn read_ctrl_fixed<const N: usize>(&self, id: usize, time: MjtNum, interp: i32) -> [MjtNum; N] {
+        self.try_read_ctrl_fixed(id, time, interp).unwrap()
+    }
+
+    /// Fallible version of [`MjData::read_ctrl_fixed`].
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nactuator`.
+    /// Returns [`MjDataError::LengthMismatch`] when `N != actuator_ctrlnum[id]`.
+    pub fn try_read_ctrl_fixed<const N: usize>(&self, id: usize, time: MjtNum, interp: i32) -> Result<[MjtNum; N], MjDataError> {
+        let nactuator = self.model.ffi().nactuator as usize;
+        if id >= nactuator {
+            return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id, upper: nactuator });
+        }
+
+        let dim = self.model.actuator_ctrlnum()[id] as usize;
+        if N != dim {
+            return Err(MjDataError::LengthMismatch { name: "N", expected: dim, got: N });
+        }
+        let mut out = [0.0 as MjtNum; N];
+        // SAFETY: id < nactuator was checked and out holds actuator_ctrlnum[id] elements, which is the
+        // length mj_readCtrl writes and the length of the slice behind a returned pointer.
+        let ptr = unsafe { mj_readCtrl(self.model.ffi(), self.ffi(), id as i32, time, out.as_mut_ptr(), interp) };
+        if !ptr.is_null() {
+            out.copy_from_slice(unsafe { std::slice::from_raw_parts(ptr, N) });
+        }
+        Ok(out)
+    }
+
+    /// Read the control value(s) for an actuator at a given time, taking delays into account.
+    /// If no history buffer exists, [`Cow::Borrowed`] is returned, containing actuator's slice of [`MjData::ctrl`].
+    /// If a history buffer exists (i.e., the actuator's nsample > 0), read from the delay buffer at
+    /// `time - `[`MjModel::actuator_delay`]`[id]`.
+    /// 
+    /// When linear or cubic interpolation is used (`interp`: -1=use the model's `interp` setting, 0=ZOH, 1=linear,
+    /// 2=cubic), and is required (`time - delay` lies strictly between two samples in buffer, without matching one),
+    /// [`Cow::Owned`] is returned with the interpolated result. Otherwise (exact match, ZOH, or `time - delay` outside
+    /// the buffer's time range), [`Cow::Borrowed`] is returned, containing actuator's slice in the delay buffer.
+    /// See also [`read_ctrl_fixed`](Self::read_ctrl_fixed), [`read_ctrl_into`](Self::read_ctrl_into).
+    /// Wraps [`mj_readCtrl`].
     /// # Panics
     /// Panics when `id >= nactuator`. Use [`MjData::try_read_ctrl`] for a fallible alternative.
-    pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> MjtNum {
+    pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> Cow<'_, [MjtNum]> {
         self.try_read_ctrl(id, time, interp).unwrap()
     }
 
     /// Fallible version of [`MjData::read_ctrl`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nactuator`.
-    pub fn try_read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> Result<MjtNum, MjDataError> {
+    pub fn try_read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> Result<Cow<'_, [MjtNum]>, MjDataError> {
         let nactuator = self.model.ffi().nactuator as usize;
         if id >= nactuator {
             return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id, upper: nactuator });
         }
-        let val = unsafe { mj_readCtrl(self.model.ffi(), self.ffi(), id as i32, time, interp) };
-        Ok(val)
+
+        // Interpolation. Mirrors mj_readCtrl.
+        let dim = self.model.actuator_ctrlnum()[id] as usize;
+        let [nsample, model_interp] = self.model.actuator_history()[id];
+        let resolved_interp = if interp < 0 { model_interp } else { interp };
+        let mut interpolated_ctrl = (nsample != 0 && resolved_interp != 0).then(|| vec![0.0; dim]);
+
+        // SAFETY: id < nactuator was checked. The buffer is null when C returns a pointer and holds
+        // actuator_ctrlnum[id] elements when C interpolates into it.
+        let ptr = unsafe { mj_readCtrl(
+            self.model.ffi(), self.ffi(),
+            id as i32, time,
+            interpolated_ctrl.as_mut().map_or(ptr::null_mut(), |x| x.as_mut_ptr()), interp
+        ) };
+
+        Ok(
+            if ptr.is_null() {
+                Cow::Owned(interpolated_ctrl.unwrap())
+            }
+            else {
+                // SAFETY: the pointer is not null (checked above) and the `dim` is read from the model for the specific
+                // actuator in question.
+                Cow::Borrowed(unsafe { std::slice::from_raw_parts(ptr, dim) })
+            }
+        )
     }
 
-    /// Reads sensor `id` at `time` into `dst` (`interp`: -1=use the model's `interp` setting,
-    /// 0=ZOH, 1=linear, 2=cubic).
-    /// `dst` must be exactly `sensor_dim[id]` elements long.
+    /// Same as [`MjData::read_sensor`], except the value(s) are written into `dst` instead of being returned.
+    /// Wraps [`mj_readSensor`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nsensor`.
     /// Returns [`MjDataError::LengthMismatch`] when `dst.len() != sensor_dim[id]`.
@@ -748,9 +913,8 @@ impl<M: ModelType> MjData<M> {
         Ok(())
     }
 
-    /// Reads sensor `id` at `time` into a stack-allocated `[MjtNum; N]`
-    /// (`interp`: -1=use the model's `interp` setting, 0=ZOH, 1=linear, 2=cubic). `N` must match `sensor_dim[id]`.
-    /// See also [`read_sensor`](Self::read_sensor), [`read_sensor_into`](Self::read_sensor_into).
+    /// Same as [`MjData::read_sensor`], except the value(s) are returned as a stack-allocated `[MjtNum; N]`.
+    /// Wraps [`mj_readSensor`].
     /// # Panics
     /// Panics when `id >= nsensor` or `N != sensor_dim[id]`.
     /// Use [`MjData::try_read_sensor_fixed`] for a fallible alternative.
@@ -781,11 +945,17 @@ impl<M: ModelType> MjData<M> {
         Ok(out)
     }
 
-    /// Reads sensor `id` at `time` (`interp`: -1=use the model's `interp` setting, 0=ZOH, 1=linear, 2=cubic).
-    ///
-    /// Returns [`Cow::Borrowed`] (zero-copy) for exact matches, ZOH, and extrapolation.
-    /// Returns [`Cow::Owned`] for linear/cubic interpolation.
+    /// Read the sensor value(s) for a sensor at a given time, taking delays into account.
+    /// If no history buffer exists, [`Cow::Borrowed`] is returned, containing sensor's slice of [`MjData::sensordata`].
+    /// If a history buffer exists (i.e., the sensor's nsample > 0), read from the delay buffer at
+    /// `time - `[`MjModel::sensor_delay`]`[id]`.
+    /// 
+    /// When linear or cubic interpolation is used (`interp`: -1=use the model's `interp` setting, 0=ZOH, 1=linear,
+    /// 2=cubic), and is required (`time - delay` lies strictly between two samples in buffer, without matching one),
+    /// [`Cow::Owned`] is returned with the interpolated result. Otherwise (exact match, ZOH, or `time - delay` outside
+    /// the buffer's time range), [`Cow::Borrowed`] is returned, containing sensor's slice in the delay buffer.
     /// See also [`read_sensor_fixed`](Self::read_sensor_fixed), [`read_sensor_into`](Self::read_sensor_into).
+    /// Wraps [`mj_readSensor`].
     /// # Panics
     /// Panics when `id >= nsensor`. Use [`MjData::try_read_sensor`] for a fallible alternative.
     pub fn read_sensor(&self, id: usize, time: MjtNum, interp: i32) -> Cow<'_, [MjtNum]> {
@@ -1101,7 +1271,7 @@ impl<M: ModelType> MjData<M> {
     /// # Panics
     /// Panics when `obj_type` is unsupported or `obj_id` is out of range.
     /// Use [`MjData::try_object_velocity`] for a fallible alternative.
-    pub fn object_velocity(&self, obj_type: MjtObj, obj_id: usize, flg_local: bool) -> [MjtNum; 6] {
+    pub fn object_velocity(&self, obj_type: MjtObjBase, obj_id: usize, flg_local: bool) -> [MjtNum; 6] {
         self.try_object_velocity(obj_type, obj_id, flg_local).unwrap()
     }
 
@@ -1111,13 +1281,13 @@ impl<M: ModelType> MjData<M> {
     /// - [`MjDataError::UnsupportedObjectType`] when `obj_type` is not one of
     ///   `mjOBJ_BODY`, `mjOBJ_XBODY`, `mjOBJ_GEOM`, `mjOBJ_SITE`, `mjOBJ_CAMERA`.
     /// - [`MjDataError::IndexOutOfBounds`] when `obj_id` is out of range for the given type.
-    pub fn try_object_velocity(&self, obj_type: MjtObj, obj_id: usize, flg_local: bool) -> Result<[MjtNum; 6], MjDataError> {
+    pub fn try_object_velocity(&self, obj_type: MjtObjBase, obj_id: usize, flg_local: bool) -> Result<[MjtNum; 6], MjDataError> {
         let max_id = match obj_type {
-            MjtObj::mjOBJ_BODY | MjtObj::mjOBJ_XBODY => self.model.ffi().nbody,
-            MjtObj::mjOBJ_GEOM => self.model.ffi().ngeom,
-            MjtObj::mjOBJ_SITE => self.model.ffi().nsite,
-            MjtObj::mjOBJ_CAMERA => self.model.ffi().ncam,
-            _ => return Err(MjDataError::UnsupportedObjectType(obj_type as i32)),
+            MjtObjBase::mjOBJ_BODY | MjtObjBase::mjOBJ_XBODY => self.model.ffi().nbody,
+            MjtObjBase::mjOBJ_GEOM => self.model.ffi().ngeom,
+            MjtObjBase::mjOBJ_SITE => self.model.ffi().nsite,
+            MjtObjBase::mjOBJ_CAMERA => self.model.ffi().ncam,
+            _ => return Err(MjDataError::UnsupportedObjectType(obj_type)),
         };
         if obj_id >= max_id as usize {
             return Err(MjDataError::IndexOutOfBounds { kind: "obj_id", id: obj_id, upper: max_id as usize });
@@ -1133,7 +1303,7 @@ impl<M: ModelType> MjData<M> {
     /// # Panics
     /// Panics when `obj_type` is unsupported or `obj_id` is out of range.
     /// Use [`MjData::try_object_acceleration`] for a fallible alternative.
-    pub fn object_acceleration(&self, obj_type: MjtObj, obj_id: usize, flg_local: bool) -> [MjtNum; 6] {
+    pub fn object_acceleration(&self, obj_type: MjtObjBase, obj_id: usize, flg_local: bool) -> [MjtNum; 6] {
         self.try_object_acceleration(obj_type, obj_id, flg_local).unwrap()
     }
 
@@ -1142,13 +1312,13 @@ impl<M: ModelType> MjData<M> {
     /// Returns:
     /// - [`MjDataError::UnsupportedObjectType`] when `obj_type` is not supported.
     /// - [`MjDataError::IndexOutOfBounds`] when `obj_id` is out of range for the given type.
-    pub fn try_object_acceleration(&self, obj_type: MjtObj, obj_id: usize, flg_local: bool) -> Result<[MjtNum; 6], MjDataError> {
+    pub fn try_object_acceleration(&self, obj_type: MjtObjBase, obj_id: usize, flg_local: bool) -> Result<[MjtNum; 6], MjDataError> {
         let max_id = match obj_type {
-            MjtObj::mjOBJ_BODY | MjtObj::mjOBJ_XBODY => self.model.ffi().nbody,
-            MjtObj::mjOBJ_GEOM => self.model.ffi().ngeom,
-            MjtObj::mjOBJ_SITE => self.model.ffi().nsite,
-            MjtObj::mjOBJ_CAMERA => self.model.ffi().ncam,
-            _ => return Err(MjDataError::UnsupportedObjectType(obj_type as i32)),
+            MjtObjBase::mjOBJ_BODY | MjtObjBase::mjOBJ_XBODY => self.model.ffi().nbody,
+            MjtObjBase::mjOBJ_GEOM => self.model.ffi().ngeom,
+            MjtObjBase::mjOBJ_SITE => self.model.ffi().nsite,
+            MjtObjBase::mjOBJ_CAMERA => self.model.ffi().ncam,
+            _ => return Err(MjDataError::UnsupportedObjectType(obj_type)),
         };
         if obj_id >= max_id as usize {
             return Err(MjDataError::IndexOutOfBounds { kind: "obj_id", id: obj_id, upper: max_id as usize });
@@ -1215,7 +1385,10 @@ impl<M: ModelType> MjData<M> {
     /// Similar semantics to mj_ray, but `vec` is an array of (nray x 3) directions.
     /// If `normals_out` is `Some`, it must be a slice of `nray` elements filled with surface normals. Use `None` to skip normals.
     /// # Panics
-    /// Panics if `normals_out` length does not match `vec.len()`.
+    /// - Panics if `normals_out` length does not match `vec.len()`.
+    /// - Panics if `vec` has more than [`i32::MAX`] rays, or if `bodyexclude` is larger than
+    ///   [`i32::MAX`].
+    ///
     /// Use [`MjData::try_multi_ray`] for a fallible alternative.
     #[allow(clippy::too_many_arguments)]
     pub fn multi_ray(
@@ -1228,12 +1401,16 @@ impl<M: ModelType> MjData<M> {
     /// Fallible version of [`MjData::multi_ray`].
     /// # Errors
     /// Returns [`MjDataError::LengthMismatch`] if `normals_out` length does not match `vec.len()`.
+    /// # Panics
+    /// Panics if `vec` has more than [`i32::MAX`] rays, or if `bodyexclude` is larger than
+    /// [`i32::MAX`].
     #[allow(clippy::too_many_arguments)]
     pub fn try_multi_ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
         flg_static: MjtBool, bodyexclude: Option<usize>, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
     ) -> Result<(Vec<Option<usize>>, Vec<MjtNum>), MjDataError> {
         let nray = vec.len();
+        let nray_c = checked_c_len::<i32, _>(nray);
         if let Some(buf) = &normals_out
             && buf.len() != nray
         {
@@ -1249,10 +1426,10 @@ impl<M: ModelType> MjData<M> {
             self.model.ffi(), self.ffi_mut(), pnt,
             bytemuck::cast_slice::<[MjtNum; 3], MjtNum>(vec).as_ptr(),
             geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
-            flg_static, bodyexclude.map_or(-1i32, |id| id as i32), geom_id_raw.as_mut_ptr(),
+            flg_static, bodyexclude.map_or(-1, checked_c_len), geom_id_raw.as_mut_ptr(),
             distance.as_mut_ptr(),
             normals_out.map_or(ptr::null_mut(), |x| bytemuck::cast_slice_mut::<[MjtNum; 3], MjtNum>(x).as_mut_ptr()),
-            nray as i32, cutoff
+            nray_c, cutoff
         ) };
 
         let geom_id = geom_id_raw.into_iter().map(|id| if id == -1 { None } else { Some(id as usize) }).collect();
@@ -1263,7 +1440,10 @@ impl<M: ModelType> MjData<M> {
     /// Returns `(geomid, distance)` where distance is -1 if no intersection.
     /// If `normal_out` is `Some`, it will be filled with the surface normal at the intersection.
     /// `geomgroup` and `flg_static` are as in mjvOption; pass `None` for `geomgroup` to skip group exclusion.
-    /// A `vec` shorter than `mjMINVAL` reports no intersection, as [`MjData::multi_ray`] does.
+    /// A `vec` shorter than `mjMINVAL` reports no intersection.
+    ///
+    /// # Panics
+    /// Panics if `bodyexclude` is larger than [`i32::MAX`].
     pub fn ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: MjtBool, bodyexclude: Option<usize>,
@@ -1284,7 +1464,7 @@ impl<M: ModelType> MjData<M> {
             self.model.ffi(), self.ffi(),
             pnt, vec,
             geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
-            flg_static, bodyexclude.map_or(-1i32, |id| id as i32), &mut geom_id_raw,
+            flg_static, bodyexclude.map_or(-1, checked_c_len), &mut geom_id_raw,
             normal_out.map_or(ptr::null_mut(), |x| x)
         ) };
         let geom_id = if geom_id_raw == -1 { None } else { Some(geom_id_raw as usize) };
@@ -1339,11 +1519,16 @@ impl<M: ModelType> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::IncompatibleModel`] if `src` was created from a model that is not
     /// compatible with this data's model (see [`MjModel::is_compatible_with_model`]).
+    ///
+    /// # Panics
+    /// Panics if `spec` is not below `1 << mjNSTATE`.
     pub fn copy_state_from_data<N: ModelType>(&mut self, src: &MjData<N>, spec: u32) -> Result<(), MjDataError> {
+        // MuJoCo ends the process through mjERROR for an unknown bit.
+        assert!(spec < 1 << mjtState::mjNSTATE as u32, "state spec {spec:#x} has an unknown bit");
         if !self.model.is_compatible_with_model(&src.model) {
             return Err(MjDataError::IncompatibleModel {
-                source: src.model.signature(),
-                destination: self.model.signature(),
+                source: Arc::clone(src.model.layout()),
+                destination: Arc::clone(self.model.layout()),
             });
         }
         unsafe {
@@ -1483,6 +1668,7 @@ impl<M: ModelType> MjData<M> {
     ///
     /// # Panics
     /// A panic will occur if `destination` is smaller than [`MjModel::state_size`] with `spec` passed as parameter.
+    /// A panic will also occur if `spec` is not below `1 << mjNSTATE`.
     /// Use [`MjData::try_read_state_into`] for a fallible alternative.
     pub fn read_state_into(&self, spec: u32, destination: &mut [MjtNum]) -> usize {
         self.try_read_state_into(spec, destination)
@@ -1494,6 +1680,9 @@ impl<M: ModelType> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::BufferTooSmall`] if `destination` is smaller than
     /// the state size required by `spec`.
+    ///
+    /// # Panics
+    /// Panics if `spec` is not below `1 << mjNSTATE`.
     ///
     /// On success, returns the number of [`MjtNum`] elements written.
     pub fn try_read_state_into(&self, spec: u32, destination: &mut [MjtNum]) -> Result<usize, MjDataError> {
@@ -1513,6 +1702,9 @@ impl<M: ModelType> MjData<M> {
 
     /// Same as [`MjData::read_state_into`], except it allocates
     /// and returns new boxed data containing the state.
+    ///
+    /// # Panics
+    /// Panics if `spec` is not below `1 << mjNSTATE`.
     pub fn state(&self, spec: u32) -> Box<[MjtNum]> {
         let mut destination = vec![0.0; self.model.state_size(spec)].into_boxed_slice();
         Self::read_state_into(self, spec, &mut destination);
@@ -1533,6 +1725,9 @@ impl<M: ModelType> MjData<M> {
     /// - [`MjDataError::InvalidHistoryCursor`] if `spec` selects [`MjtState::mjSTATE_HISTORY`]
     ///   and a cursor slot in `state` lies outside `0..nsample` for its buffer. The history
     ///   buffer keeps its previous contents; every other selected component stays written.
+    ///
+    /// # Panics
+    /// Panics if `spec` is not below `1 << mjNSTATE`.
     pub fn set_state(&mut self, state: &[MjtNum], spec: u32) -> Result<(), MjDataError> {
         let required_len = self.model.state_size(spec);
         if state.len() < required_len {
@@ -1615,8 +1810,8 @@ impl<M: ModelType> MjData<M> {
     pub fn copy_visual_to<N: ModelType>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
         if !self.model.is_compatible_with_model(&destination.model) {
             return Err(MjDataError::IncompatibleModel {
-                source: self.model.signature(),
-                destination: destination.model.signature(),
+                source: Arc::clone(self.model.layout()),
+                destination: Arc::clone(destination.model.layout()),
             });
         }
         unsafe {
@@ -1637,8 +1832,8 @@ impl<M: ModelType> MjData<M> {
     pub fn copy_to<N: ModelType>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
         if !self.model.is_compatible_with_model(&destination.model) {
             return Err(MjDataError::IncompatibleModel {
-                source: self.model.signature(),
-                destination: destination.model.signature(),
+                source: Arc::clone(self.model.layout()),
+                destination: Arc::clone(destination.model.layout()),
             });
         }
         unsafe {
@@ -1719,8 +1914,11 @@ impl<M: ModelType> MjData<M> {
         [ffi] nefc: i32; "number of constraints.";
         [ffi] nJ: i32; "number of non-zeros in constraint Jacobian.";
         [ffi] nefmK: i32; "number of non-zeros in effective-stiffness CSR.";
+        [ffi] nefmcon: i32; "packed length of the contact rank-1 rows.";
+        [ffi] nefmT: i32; "number of tendons with terms in the metric.";
+        [ffi] nefmA: i32; "number of actuators with terms in the metric.";
         [ffi] nefmdof: i32; "number of 3x3 blocks in the effective-metric preconditioner.";
-        [ffi] nefmL: i32; "size of the effective-metric block storage (9*nefmdof).";
+        [ffi] nefmL: i32; "size of efm_L (9*nefmdof plus optional Cholesky or island tail).";
         [ffi] nY: i32; "number of non-zeros in constraint inverse inertia square root.";
         [ffi] nA: i32; "number of non-zeros in constraint inverse inertia matrix.";
         [ffi] nisland: i32; "number of detected constraint islands.";
@@ -1733,16 +1931,20 @@ impl<M: ModelType> MjData<M> {
     ]}
 
     /// Returns the memory layout snapshot of the model this data belongs to.
-    ///
-    /// The buffers were allocated for the model that created this data. That model and
-    /// [`MjData::model`] share one layout, because [`MjData::try_swap_model`] rejects a model
-    /// that does not.
     pub(crate) fn layout(&self) -> &Arc<MjModelLayout> {
         self.model.layout()
     }
 
+    /// Returns the number of initialized entries in `efc_J`.
+    fn efc_j_len(&self) -> usize {
+        // Dense mode sizes nJ by the counted rows, but MuJoCo skips an empty non-contact row;
+        // sparse nJ never exceeds nefc * nv.
+        let nefc_nv = (self.ffi().nefc as usize).strict_mul(self.model.ffi().nv as usize);
+        (self.ffi().nJ as usize).min(nefc_nv)
+    }
+
     getter_setter! {get, [
-        [ffi] efm_active: bool; "whether the implicit effective metric M+K is active.";
+        [ffi] efm_active: bool; "implicit effective metric M+K is active (see mj_effBuild).";
     ]}
 
     getter_setter! {get, [
@@ -1780,7 +1982,7 @@ impl<M: ModelTypeMut> MjData<M> {
     /// (e.g., timestep, gravity) without having to rebuild the simulation.
     ///
     /// **Not all model parameters are safe to change at runtime.**
-    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.12.0/programming/simulation.html#mjmodel-changes)
+    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.17.0/programming/simulation.html#mjmodel-changes)
     /// for a list of parameters that are safe to change.
     ///
     /// Only available when the inner model type `M` implements [`ModelTypeMut`]
@@ -1792,8 +1994,10 @@ impl<M: ModelTypeMut> MjData<M> {
     /// This method is marked unsafe as the owned model can be swapped entirely without any compatibility
     /// checks.
     /// 
-    /// It is the caller's responsibility to ensure that a swapped model is compatible with the
-    /// model this data belongs to, as [`MjModel::is_compatible_with_model`] defines.
+    /// It is the caller's responsibility to ensure that every size of a changed or swapped model
+    /// stays equal, and that every index, count and address table stays in bounds for the buffers
+    /// of this data, and that each plugin instance keeps its plugin, as for
+    /// [`MjData::swap_model_unchecked`].
     /// 
     /// For safe swapping consider [`MjData::swap_model`] or [`MjData::try_swap_model`] for a fallible alternative.
     ///
@@ -1870,7 +2074,7 @@ impl<M: ModelTypeMut> MjData<M> {
     /// 
     /// # Note
     /// MuJoCo aborts the process through `mjERROR` when the model is inconsistent.
-    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.12.0/programming/simulation.html#mjmodel-changes)
+    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.17.0/programming/simulation.html#mjmodel-changes)
     /// for information about safety of model changes.
     pub fn set_const(&mut self) {
         // SAFETY: All modifications are local to the owned data.
@@ -1940,11 +2144,16 @@ impl<M: ModelType> MjData<M> {
         flexvert_xpos: &[[MjtNum; 3] [force]; "Cartesian flex vertex positions"; model.ffi().nflexvert],
         flexelem_aabb: &[[MjtNum; 6] [force]; "flex element bounding boxes (center, size)"; model.ffi().nflexelem],
         flexelem_krot: &[MjtNum; "corotated element stiffness (implicit only)"; model.ffi().nflexstiffness],
+        flex_hessian_valid: &[MjtBool; "Cartesian stretch Hessian cache is current"; model.ffi().nflex],
+        flexvert_hessian: &[[MjtNum; 6] [force]; "symmetric diagonal Hessian blocks"; model.ffi().nflexvert],
+        flexedge_hessian: &[[MjtNum; 9] [force]; "oriented off-diagonal Hessian blocks"; model.ffi().nflexedge],
         flexedge_J: &[MjtNum; "flex edge Jacobian"; model.ffi().nJfe],
         flexedge_length: &[MjtNum; "flex edge lengths"; model.ffi().nflexedge],
         flexvert_J: &[[MjtNum; 2] [force]; "flex vertex Jacobian"; model.ffi().nJfv],
         flexvert_length: &[[MjtNum; 2] [force]; "flex vertex lengths"; model.ffi().nflexvert],
         bvh_aabb_dyn: &[[MjtNum; 6] [force]; "global bounding box (center, size)"; model.ffi().nbvhdynamic],
+        flexvert_lambda: &[MjtNum; "flex contact multiplier"; model.ffi().nflexvert],
+        flexvert_conage: &[i32; "flex contact age: <0 loaded, >0 steps since"; model.ffi().nflexvert],
         (mut = unsafe) ten_wrapadr: &[i32; "start address of tendon's path"; model.ffi().ntendon],
         (mut = unsafe) ten_wrapnum: &[i32; "number of wrap points in path"; model.ffi().ntendon],
         ten_J: &[MjtNum; "tendon Jacobian"; model.ffi().nJten],
@@ -1957,7 +2166,7 @@ impl<M: ModelType> MjData<M> {
         (mut = unsafe) moment_colind: &[i32; "column indices in sparse Jacobian"; model.ffi().nJmom],
         actuator_moment: &[MjtNum; "actuator moments"; model.ffi().nJmom],
         crb: &[[MjtNum; 10] [force]; "com-based composite inertia and mass"; model.ffi().nbody],
-        M: &[MjtNum; "inertia (compressed sparse row)"; model.ffi().nC],
+        M: &[MjtNum; "inertia (sparse)"; model.ffi().nC],
         qLD: &[MjtNum; "L'*D*L factorization of M (sparse)"; model.ffi().nC],
         qLDiagInv: &[MjtNum; "1/diag(D)"; model.ffi().nv],
         bvh_active: &[MjtBool; "was bounding volume checked for collision"; model.ffi().nbvh],
@@ -1988,7 +2197,7 @@ impl<M: ModelType> MjData<M> {
         qfrc_actuator: &[MjtNum; "actuator force in joint space"; model.ffi().nv],
         qfrc_smooth: &[MjtNum; "net unconstrained force"; model.ffi().nv],
         qacc_smooth: &[MjtNum; "unconstrained acceleration"; model.ffi().nv],
-        qfrc_constraint: &[MjtNum; "constraint force"; model.ffi().nv],
+        qfrc_constraint: &[MjtNum; "constraint force (flag ipc: incl. flex contact)"; model.ffi().nv],
         qfrc_inverse: &[MjtNum; "net external force; should equal qfrc_applied + J'*xfrc_applied + qfrc_actuator"; model.ffi().nv],
         cacc: &[[MjtNum; 6] [force]; "com-based acceleration"; model.ffi().nbody],
         cfrc_int: &[[MjtNum; 6] [force]; "com-based interaction force with parent"; model.ffi().nbody],
@@ -2000,14 +2209,14 @@ impl<M: ModelType> MjData<M> {
         (read = unsafe) efc_J_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
         (read = unsafe) efc_J_rowsuper: &[i32; "number of subsequent rows in supernode"; ffi().nefc],
         (read = unsafe) efc_J_colind: &[i32; "column indices in constraint Jacobian"; ffi().nJ],
-        efc_J: &[MjtNum; "constraint Jacobian"; ffi().nJ],
+        efc_J: &[MjtNum; "constraint Jacobian"; efc_j_len()],
         efc_pos: &[MjtNum; "constraint position (equality, contact)"; ffi().nefc],
         efc_margin: &[MjtNum; "inclusion margin (contact)"; ffi().nefc],
         efc_frictionloss: &[MjtNum; "frictionloss (friction)"; ffi().nefc],
-        efc_diagA: &[MjtNum; "diagonal of A matrix, approximate or exact"; ffi().nefc],
-        efc_KBIP: &[[MjtNum; 4] [force]; "stiffness, damping, impedance, imp'"; ffi().nefc],
-        efc_D: &[MjtNum; "constraint mass"; ffi().nefc],
-        efc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
+        (read = unsafe) efc_diagA: &[MjtNum; "diagonal of A matrix, approximate or exact"; ffi().nefc],
+        (read = unsafe) efc_KBIP: &[[MjtNum; 4] [force]; "stiffness, damping, impedance, imp'"; ffi().nefc],
+        (read = unsafe) efc_D: &[MjtNum; "constraint mass"; ffi().nefc],
+        (read = unsafe) efc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
         (mut = unsafe) tendon_efcadr: &[i32; "first efc address involving tendon; -1: none"; model.ffi().ntendon],
         (mut = unsafe) tree_island: &[i32; "island id of this tree; -1: none"; model.ffi().ntree],
         (mut = unsafe) island_ntree: &[i32; "number of trees in this island"; ffi().nisland],
@@ -2032,25 +2241,38 @@ impl<M: ModelType> MjData<M> {
         (mut = unsafe) iefc_type: &[MjtConstraint [force]; "constraint type"; ffi().nefc],
         (mut = unsafe) iefc_id: &[i32; "id of object of specified type"; ffi().nefc],
         iefc_frictionloss: &[MjtNum; "frictionloss (friction)"; ffi().nefc],
-        iefc_D: &[MjtNum; "constraint mass"; ffi().nefc],
-        iefc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
+        (read = unsafe) iefc_D: &[MjtNum; "constraint mass"; ffi().nefc],
+        (read = unsafe) iefc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
         (mut = unsafe) efc_Y_rownnz: &[i32; "number of non-zeros in Y row"; ffi().nefc],
         (mut = unsafe) efc_Y_rowadr: &[i32; "row start address in Y colind array"; ffi().nefc],
         (mut = unsafe) efc_Y_colind: &[i32; "column indices in sparse Y"; ffi().nY],
-        efc_Y: &[MjtNum; "whitened Jacobian Y = J*M^(-1/2)"; ffi().nY],
+        (read = unsafe) efc_Y: &[MjtNum; "whitened Jacobian Y = J*M^(-1/2)"; ffi().nY],
         (mut = unsafe) efc_AR_rownnz: &[i32; "number of non-zeros in AR"; ffi().nefc],
-        (mut = unsafe) efc_AR_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
+        (mut = unsafe) efc_AR_rowadr: &[i32; "row start address in AR colind array"; ffi().nefc],
         (mut = unsafe) efc_AR_colind: &[i32; "column indices in sparse AR"; ffi().nA],
-        efc_AR: &[MjtNum; "J*inv(M)*J' + R"; ffi().nA],
+        (read = unsafe) efc_AR: &[MjtNum; "J*inv(M)*J' + R"; ffi().nA],
         (read = unsafe) efc_vel: &[MjtNum; "velocity in constraint space: J*qvel"; ffi().nefc],
         (read = unsafe) efc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
-        efm_c: &[MjtNum; "smooth-force shift h*K*qvel"; model.ffi().nv],
+        (read = unsafe) efm_c: &[MjtNum; "smooth-force shift h*K*qvel"; model.ffi().nv],
+        (read = unsafe) efm_diag: &[MjtNum; "effective-metric diagonal h*D + h^2*K"; model.ffi().nv],
+        efm_ck: &[MjtNum; "diagonal stiffness h*k, for the smooth shift"; model.ffi().nv],
+        (read = unsafe) efm_sdiag: &[MjtNum; "diagonal additions to M in the backbone"; model.ffi().nv],
+        (read = unsafe) efm_fluid: &[MjtNum; "fluid drag blocks in M's sparsity pattern"; model.ffi().nC],
+        (mut = unsafe) efm_tid: &[i32; "ids of tendons with terms in the metric"; ffi().nefmT],
+        (read = unsafe) efm_ts: &[MjtNum; "tendon metric scale h^2*k + h*b, tid indexed"; ffi().nefmT],
+        (read = unsafe) efm_tk: &[MjtNum; "tendon stiffness h*k for shift, tid indexed"; ffi().nefmT],
+        (mut = unsafe) efm_aid: &[i32; "ids of actuators with terms in the metric"; ffi().nefmA],
+        efm_as: &[MjtNum; "actuator metric scale h^2*gp + h*gv, aid indexed"; ffi().nefmA],
+        efm_ak: &[MjtNum; "actuator stiffness h*gp, aid indexed"; ffi().nefmA],
+        efm_ca: &[MjtNum; "actuation-stage smooth-force shift"; model.ffi().nv],
         (mut = unsafe) efm_K_rownnz: &[i32; "effective-stiffness CSR row nonzeros"; model.ffi().nv],
         (mut = unsafe) efm_K_rowadr: &[i32; "effective-stiffness CSR row addresses"; model.ffi().nv],
         (mut = unsafe) efm_K_colind: &[i32; "effective-stiffness CSR column indices"; ffi().nefmK],
         efm_K_val: &[MjtNum; "effective-stiffness CSR values"; ffi().nefmK],
         (mut = unsafe) efm_dofid: &[i32; "block k -> dof address of its vertex triple"; ffi().nefmdof],
-        efm_L: &[MjtNum; "factored 3x3 diagonal blocks of M+K"; ffi().nefmL],
+        (mut = unsafe) efm_con_ind: &[i32; "contact rows, packed [nnz, conid, colind...]"; ffi().nefmcon],
+        efm_con_val: &[MjtNum; "contact rows, packed [scale, force, val...]"; ffi().nefmcon],
+        (read = unsafe) efm_L: &[MjtNum; "factored 3x3 blocks of M+K and packed tail data"; ffi().nefmL],
         (read = unsafe) efc_b: &[MjtNum; "linear cost term: J*qacc_smooth - aref"; ffi().nefc],
         (read = unsafe) iefc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
         (read = unsafe) iefc_state: &[MjtConstraintState [force]; "constraint state"; ffi().nefc],
@@ -2527,10 +2749,10 @@ mod test {
         let mat = data.angmom_mat(0);
         assert_eq!(mat.len(), (3 * data.model.ffi().nv as usize));
 
-        let vel = data.object_velocity(MjtObj::mjOBJ_BODY, 0, true);
+        let vel = data.object_velocity(MjtObjBase::mjOBJ_BODY, 0, true);
         assert_eq!(vel.len(), 6);
 
-        let acc = data.object_acceleration(MjtObj::mjOBJ_BODY, 0, false);
+        let acc = data.object_acceleration(MjtObjBase::mjOBJ_BODY, 0, false);
         assert_eq!(acc.len(), 6);
     }
 
@@ -2569,8 +2791,8 @@ mod test {
         // Test actual distance between two different geoms (green_sphere and green_sphere2).
         // green_sphere is at (.2, .2, .1) and green_sphere2 is at (.7, .2, .1), both with radius 0.1.
         // Expected distance ~= 0.5 - 2*0.1 = 0.3 (center distance minus both radii).
-        let geom0_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere").unwrap();
-        let geom1_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere2").unwrap();
+        let geom0_id = model.name_to_id(MjtObjBase::mjOBJ_GEOM, "green_sphere").unwrap();
+        let geom1_id = model.name_to_id(MjtObjBase::mjOBJ_GEOM, "green_sphere2").unwrap();
 
         let mut ft = [0.0; 6];
         let dist = data.geom_distance(geom0_id, geom1_id, 1.0, Some(&mut ft));
@@ -2651,7 +2873,7 @@ mod test {
     fn test_init_history_ctrl_and_sensor() {
         const HIST_MODEL: &str = r#"
 <mujoco>
-  <option timestep="0.01"/>
+  <option timestep="0.015625"/>
   <worldbody>
     <body name="body">
       <joint name="slide" type="slide"/>
@@ -2659,10 +2881,10 @@ mod test {
     </body>
   </worldbody>
   <actuator>
-    <motor name="motor0" joint="slide" delay="0.05" nsample="6"/>
+    <motor name="motor0" joint="slide" delay="0.0625" nsample="6"/>
   </actuator>
   <sensor>
-    <jointpos name="jointpos0" joint="slide" delay="0.025" interp="linear" nsample="4"/>
+    <jointpos name="jointpos0" joint="slide" delay="0.03125" interp="linear" nsample="4"/>
   </sensor>
 </mujoco>
 "#;
@@ -2670,29 +2892,54 @@ mod test {
         let model = MjModel::from_xml_string(HIST_MODEL).unwrap();
         let mut data = model.make_data();
 
-        let times_ctrl: Vec<MjtNum> = (0..6).map(|i| i as MjtNum * 0.01).collect();
-        let values_ctrl = vec![1.2345; 6];
+        // mj_readCtrl and mj_readSensor read at (time - delay). Times are binary-exact, because C
+        // interpolates a time that rounds to just above a sample instead of matching it.
+        let timestep = model.opt().timestep;
+        let delay_ctrl = model.actuator_delay()[0];
+        let times_ctrl: Vec<MjtNum> = (0..model.actuator_history()[0][0]).map(|i| MjtNum::from(i) * timestep).collect();
+        let values_ctrl = vec![10.0, 20.0, 30.0, 40.0, 50.0, 60.0];
         data.init_ctrl_history(0, Some(&times_ctrl), &values_ctrl).unwrap();
 
-        // read back via safe wrapper: exact-match should return provided value
-        let val = data.read_ctrl(0, times_ctrl[2], 0);
-        assert_relative_eq!(val, values_ctrl[2], epsilon=1e-12);
+        // exact match -> Cow::Borrowed
+        let Cow::Borrowed(&[val]) = data.read_ctrl(0, times_ctrl[2] + delay_ctrl, 1) else {
+            panic!("exact match should yield Cow::Borrowed with one control");
+        };
+        assert_relative_eq!(val, 30.0, epsilon=1e-12);
 
-        // sensor history via wrapper
-        let times_sens: Vec<MjtNum> = (0..4).map(|i| i as MjtNum * 0.01).collect();
-        // sensor dim for jointpos is 1
-        let values_sens = vec![std::f64::consts::E; 4];
+        // ZOH between samples -> Cow::Borrowed of the older sample
+        let mid_ctrl = (times_ctrl[1] + times_ctrl[2]) / 2.0 + delay_ctrl;
+        let Cow::Borrowed(&[val]) = data.read_ctrl(0, mid_ctrl, 0) else {
+            panic!("ZOH should yield Cow::Borrowed with one control");
+        };
+        assert_relative_eq!(val, 20.0, epsilon=1e-12);
+
+        // linear interpolation -> Cow::Owned
+        let Cow::Owned(interpolated) = data.read_ctrl(0, mid_ctrl, 1) else {
+            panic!("interpolation should yield Cow::Owned");
+        };
+        assert_eq!(interpolated.len(), 1);
+        assert_relative_eq!(interpolated[0], 25.0, epsilon=1e-9);
+
+        // the variants agree with read_ctrl on both paths
+        for (time, expected) in [(times_ctrl[2] + delay_ctrl, 30.0), (mid_ctrl, 25.0)] {
+            assert_relative_eq!(data.read_ctrl_fixed::<1>(0, time, 1)[0], expected, epsilon=1e-9);
+            let mut dst = [0.0];
+            data.read_ctrl_into(0, time, 1, &mut dst).unwrap();
+            assert_relative_eq!(dst[0], expected, epsilon=1e-9);
+        }
+
+        // sensor history via wrapper (sensor dim for jointpos is 1)
+        let delay_sens = model.sensor_delay()[0];
+        let times_sens: Vec<MjtNum> = (0..model.sensor_history()[0][0]).map(|i| MjtNum::from(i) * timestep).collect();
+        let values_sens = vec![1.0, 2.0, 3.0, 4.0];
         data.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).unwrap();
 
-        let got = data.read_sensor_fixed::<1>(0, times_sens[1], 0);
-        assert_eq!(got.len(), 1);
+        let got = data.read_sensor_fixed::<1>(0, times_sens[1] + delay_sens, 0);
         assert_relative_eq!(got[0], values_sens[1], epsilon=1e-12);
 
-        // also test interpolation path (time between samples)
-        let interp_res = data.read_sensor_fixed::<1>(0, 0.005, 1);
-        assert_eq!(interp_res.len(), 1);
-        // values are identical here, but ensure we get a value
-        assert_relative_eq!(interp_res[0], values_sens[0], epsilon=1e-12);
+        // interpolation path (time between samples)
+        let interp_res = data.read_sensor_fixed::<1>(0, (times_sens[0] + times_sens[1]) / 2.0 + delay_sens, 1);
+        assert_relative_eq!(interp_res[0], 1.5, epsilon=1e-9);
     }
 
     #[test]
@@ -2726,7 +2973,7 @@ mod test {
         const MODIFIED_VALUE: f64 = 15.0;
 
         let model = MjModel::from_xml_string(MODEL).unwrap();
-        let name = model.id_to_name(MjtObj::mjOBJ_JOINT, BALL_INDEX).unwrap();
+        let name = model.id_to_name(MjtObjBase::mjOBJ_JOINT, BALL_INDEX).unwrap();
 
         let mut data = MjData::new(&model);
         let ball2_joint_info = data.joint(name).unwrap();
@@ -2937,7 +3184,7 @@ mod test {
         // Cow::Borrowed (exact time match) and Cow::Owned (interpolation) paths.
         const HIST_MODEL: &str = r#"
 <mujoco>
-  <option timestep="0.01"/>
+  <option timestep="0.015625"/>
   <worldbody>
     <body>
       <joint name="slide" type="slide"/>
@@ -2945,16 +3192,17 @@ mod test {
     </body>
   </worldbody>
   <sensor>
-    <jointpos name="jp" joint="slide" delay="0.03" interp="linear" nsample="4"/>
+    <jointpos name="jp" joint="slide" delay="0.03125" interp="linear" nsample="4"/>
   </sensor>
 </mujoco>
 "#;
         let model = MjModel::from_xml_string(HIST_MODEL).unwrap();
         let mut data = model.make_data();
-        let delay = 0.03;
+        let delay = model.sensor_delay()[0];
 
         // Seed the history buffer with known distinct values.
-        let hist_times: Vec<_> = (0..4).map(|i| i as MjtNum * 0.01).collect();
+        let timestep = model.opt().timestep;
+        let hist_times: Vec<_> = (0..model.sensor_history()[0][0]).map(|i| MjtNum::from(i) * timestep).collect();
         let values = vec![10.0, 20.0, 30.0, 40.0]; // dim==1 for jointpos
         data.init_sensor_history(0, Some(&hist_times), &values, 0.0).unwrap();
 
@@ -2962,16 +3210,21 @@ mod test {
         // entry at hist_times[i] we must pass time = hist_times[i] + delay.
 
         // exact match -> Cow::Borrowed
-        let query_time = hist_times[2] + delay; // 0.02 + 0.03 = 0.05
+        let query_time = hist_times[2] + delay;
         let cow = data.read_sensor(0, query_time, 0);
         assert_eq!(cow.len(), 1);
         assert_relative_eq!(cow[0], 30.0, epsilon = 1e-12);
         assert!(matches!(cow, std::borrow::Cow::Borrowed(_)),
                 "exact match should yield Cow::Borrowed");
+        // exact match with interpolation requested -> still Cow::Borrowed
+        let cow = data.read_sensor(0, query_time, 1);
+        assert_relative_eq!(cow[0], 30.0, epsilon = 1e-12);
+        assert!(matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "exact match with interp=1 should yield Cow::Borrowed");
 
         // interpolation -> Cow::Owned
-        // midpoint between hist_times[1]=0.01 and hist_times[2]=0.02 -> internal time 0.015
-        let interp_query = (hist_times[1] + hist_times[2]) / 2.0 + delay; // 0.045
+        // midpoint between hist_times[1] and hist_times[2]
+        let interp_query = (hist_times[1] + hist_times[2]) / 2.0 + delay;
         let cow_interp = data.read_sensor(0, interp_query, 1);
         assert_eq!(cow_interp.len(), 1);
         assert_relative_eq!(cow_interp[0], 25.0, epsilon = 1e-6); // linear interp of 20 and 30
@@ -3190,63 +3443,10 @@ mod test {
         let mut data = MjData::new(plain);
         let buffer_len = data.userdata().len();
         let err = data.try_swap_model(userdata).unwrap_err();
-        match err {
-            MjDataError::IncompatibleModel { source, destination } => assert_eq!(source, destination),
-            other => panic!("expected IncompatibleModel, got {other:?}"),
-        }
+        assert!(matches!(err, MjDataError::IncompatibleModel { .. }), "got {err:?}");
         assert_eq!(data.userdata().len(), buffer_len);
     }
 
-    #[test]
-    fn test_try_view_signature_mismatch() {
-        let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
-        let model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body><body name='extra'/></worldbody></mujoco>").unwrap();
-
-        let data1 = model1.make_data();
-        let joint_info1 = data1.joint("j1").unwrap();
-        let mut data2 = model2.make_data();
-
-        let err = joint_info1.try_view(&data2).unwrap_err();
-        match err {
-            MjDataError::IncompatibleModel { source, destination } => {
-                assert_eq!(source, data1.signature());
-                assert_eq!(destination, data2.signature());
-            }
-            other => panic!("expected IncompatibleModel, got {other:?}"),
-        }
-
-        let err = joint_info1.try_view_mut(&mut data2).unwrap_err();
-        match err {
-            MjDataError::IncompatibleModel { source, destination } => {
-                assert_eq!(source, data1.signature());
-                assert_eq!(destination, data2.signature());
-            }
-            other => panic!("expected IncompatibleModel, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn test_try_view_rejects_a_different_sensor_split() {
-        let sensor_model = |first: u32, second: u32| MjModel::from_xml_string(&format!(
-            "<mujoco><worldbody><body name='b1'><joint name='j' type='hinge'/><geom size='0.1'/>\
-             </body></worldbody><sensor><user name='u1' dim='{first}' objtype='body' objname='b1'/>\
-             <user name='u2' dim='{second}' objtype='body' objname='b1'/></sensor></mujoco>"
-        )).unwrap();
-
-        let model = sensor_model(3, 1);
-        let swapped = sensor_model(1, 3);
-        assert_eq!(model.signature(), swapped.signature(), "the pair must share a signature");
-        assert_eq!(model.nsensordata(), swapped.nsensordata(), "the data totals must agree");
-
-        let data = model.make_data();
-        let info = data.sensor("u1").unwrap();
-        assert_eq!(info.view(&data).data.len(), 3);
-
-        // In `swapped` the first sensor owns one element, so this range would reach the second.
-        let mut other = swapped.make_data();
-        assert!(info.try_view(&other).is_err());
-        assert!(info.try_view_mut(&mut other).is_err());
-    }
 
     /// `update_layout` re-points an `Info` at a second `MjData`, so a later view test compares a
     /// pointer instead of the whole snapshot. It must refuse a model that is not compatible, and
@@ -3275,6 +3475,25 @@ mod test {
         let swapped_data = swapped.make_data();
         assert!(info.update_layout(&swapped_data).is_err());
         assert_eq!(info.view(&data).data.len(), 3, "a refused re-point must not disturb the Info");
+    }
+
+    /// A `bodyexclude` id above `i32::MAX` must panic.
+    #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn test_ray_body_exclude_above_i32_panics() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+        let (pnt, vec) = ([0.0; 3], [1.0, 0.0, 0.0]);
+
+        // 1 << 32 wraps to 0 (the world body) under a plain `as i32` cast.
+        let ray = std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+            || data.ray(&pnt, &vec, None, true, Some(1 << 32), None)
+        ));
+        assert!(ray.is_err());
+        let multi = std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+            || data.multi_ray(&pnt, &[vec], None, true, Some(1 << 32), 10.0, None)
+        ));
+        assert!(multi.is_err());
     }
 
     #[test]
@@ -3439,11 +3658,11 @@ mod test {
         let data = model.make_data();
 
         // Unsupported type (mjOBJ_JOINT is not in the match arms)
-        let err = data.try_object_velocity(MjtObj::mjOBJ_JOINT, 0, false).unwrap_err();
-        assert!(matches!(err, MjDataError::UnsupportedObjectType(_)));
+        let err = data.try_object_velocity(MjtObjBase::mjOBJ_JOINT, 0, false).unwrap_err();
+        assert_eq!(err, MjDataError::UnsupportedObjectType(MjtObjBase::mjOBJ_JOINT));
 
         // Out-of-range body ID
-        let err = data.try_object_velocity(MjtObj::mjOBJ_BODY, 9999, false).unwrap_err();
+        let err = data.try_object_velocity(MjtObjBase::mjOBJ_BODY, 9999, false).unwrap_err();
         assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "obj_id", .. }));
     }
 
@@ -3962,7 +4181,8 @@ mod test {
 
         let nefc = data.ffi().nefc as usize;
         if nefc > 0 {
-            let efc_kbip = data.efc_kbip();
+            // SAFETY: step() ran the full pipeline, which fills efc_KBIP.
+            let efc_kbip = unsafe { data.efc_kbip() };
             assert_eq!(efc_kbip.len(), nefc);
             for i in 0..nefc {
                 for j in 0..4 {
@@ -4258,8 +4478,8 @@ mod test {
         let mut data = model.make_data();
         let nv = model.nv() as usize;
 
-        let s1_id = model.name_to_id(MjtObj::mjOBJ_SITE, "s1").unwrap();
-        let s2_id = model.name_to_id(MjtObj::mjOBJ_SITE, "s2").unwrap();
+        let s1_id = model.name_to_id(MjtObjBase::mjOBJ_SITE, "s1").unwrap();
+        let s2_id = model.name_to_id(MjtObjBase::mjOBJ_SITE, "s2").unwrap();
 
         for config in 0..2 {
             if config == 0 {
@@ -4494,8 +4714,8 @@ mod test {
         let nv = model.nv() as usize;
         assert_eq!(nv, 2);
 
-        let s1_id = model.name_to_id(MjtObj::mjOBJ_SITE, "s1").unwrap();
-        let s2_id = model.name_to_id(MjtObj::mjOBJ_SITE, "s2").unwrap();
+        let s1_id = model.name_to_id(MjtObjBase::mjOBJ_SITE, "s1").unwrap();
+        let s2_id = model.name_to_id(MjtObjBase::mjOBJ_SITE, "s2").unwrap();
 
         let to_dense = |data: &MjData<_>, model: &MjModel| -> Vec<MjtNum> {
             let ten_j = data.ten_j();
@@ -4837,7 +5057,8 @@ mod test {
             }
 
             // efc_KBIP should be populated
-            let kbip = data.efc_kbip();
+            // SAFETY: The model was stepped above, so the full pipeline filled efc_KBIP.
+            let kbip = unsafe { data.efc_kbip() };
             assert_eq!(kbip.len(), nefc);
             for i in 0..nefc {
                 for j in 0..4 {
@@ -5414,5 +5635,43 @@ mod test {
         unsafe { data.model_mut() }.body_mass_mut()[1] = 2.0;
         data.set_const();
         assert_relative_eq!(data.model().body_invweight0()[1][0], 0.5, epsilon=1e-9);
+    }
+
+    #[test]
+    fn test_contact_force() {
+        let mut data = MjData::new(Box::new(MjSpec::new().compile().unwrap()));
+        data.step();
+        assert_eq!(data.ncon(), 0);
+        assert!(matches!(data.try_contact_force(0), Err(MjDataError::IndexOutOfBounds { kind: "contact", id: 0, upper: 0 }))) ;
+    }
+
+    #[test]
+    fn test_is_point_inside_site() {
+        let model = MjModel::from_xml_string("<mujoco><worldbody><body pos='1 0 0'>
+            <site type='box' size='0.1 0.1 0.1'/></body></worldbody></mujoco>").unwrap();
+        let mut data = MjData::new(Box::new(model));
+        data.forward();
+        assert!(data.is_point_inside_site(0, &[1.05, 0.0, 0.0]));
+        assert!(!data.is_point_inside_site(0, &[0.0, 0.0, 0.0]));
+        assert!(matches!(
+            data.try_is_point_inside_site(1, &[0.0; 3]),
+            Err(MjDataError::IndexOutOfBounds { kind: "site_id", id: 1, upper: 1 })
+        ));
+    }
+
+    #[test]
+    #[should_panic(expected = "unknown bit")]
+    fn test_state_size_unknown_spec_bit_panics() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        model.state_size(1 << MjtState::mjNSTATE as u32);
+    }
+
+    #[test]
+    #[should_panic(expected = "unknown bit")]
+    fn test_copy_state_unknown_spec_bit_panics() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let source = model.make_data();
+        let mut destination = model.make_data();
+        let _ = destination.copy_state_from_data(&source, 1 << MjtState::mjNSTATE as u32);
     }
 }

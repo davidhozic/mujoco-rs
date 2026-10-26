@@ -22,9 +22,18 @@ use std::collections::VecDeque;
 /// Window, OpenGL context and drawing surface, created when the event loop resumes.
 #[derive(Debug)]
 pub(crate) struct RenderBaseGlState {
-    pub(crate) window: Window,
+    // Fields drop in declaration order. The context and the surface must go before the
+    // native window that they were created on.
     pub(crate) gl_context: PossiblyCurrentContext,
     pub(crate) gl_surface: Surface<WindowSurface>,
+    pub(crate) window: Window,
+}
+
+/// Release the context before dropping to avoid issues.
+impl Drop for RenderBaseGlState {
+    fn drop(&mut self) {
+        let _ = self.gl_context.make_not_current_in_place();
+    }
 }
 
 /// Base struct for rendering through Glutin.

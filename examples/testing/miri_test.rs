@@ -1,7 +1,7 @@
 //! Comprehensive Miri test for `mujoco-rs`.
-use mujoco_rs::wrappers::{MjModel, MjData, MjtObj, MjtGeom, MjtJoint, MjtTrn, MjtSensor};
+use mujoco_rs::wrappers::{MjModel, MjData, MjtObjBase, MjtGeomBase, MjtJoint, MjtTrn, MjtSensor};
 use mujoco_rs::wrappers::mj_editing::MjtLimited;
-use mujoco_rs::prelude::{MjSpec, SpecItem};
+use mujoco_rs::prelude::{MjSpec, SpecElement, SpecItem};
 use mujoco_rs::mujoco_c::mjtState;
 use mujoco_rs::wrappers::fun::*;
 
@@ -19,7 +19,7 @@ fn build_model() -> MjModel {
     world.add_light().with_name("main_light").with_pos([0.0, 0.0, 2.0]).with_dir([0.0, 0.0, -1.0]);
     world.add_geom()
         .with_name("floor")
-        .with_type(MjtGeom::mjGEOM_PLANE)
+        .with_type(MjtGeomBase::mjGEOM_PLANE)
         .with_size([10.0, 10.0, 1.0])
         .with_rgba([0.8, 0.9, 0.8, 1.0]);
     log::info!("  Added floor");
@@ -27,14 +27,14 @@ fn build_model() -> MjModel {
     // Body 1: Free box
     let body1 = world.add_body().with_name("box1").with_pos([0.0, 0.0, 0.5]);
     body1.add_joint().with_name("box1_joint").with_type(MjtJoint::mjJNT_FREE);
-    body1.add_geom().with_name("box1_geom").with_type(MjtGeom::mjGEOM_BOX).with_size([0.2, 0.2, 0.2]).with_rgba([1.0, 0.0, 0.0, 1.0]).with_mass(1.0);
+    body1.add_geom().with_name("box1_geom").with_type(MjtGeomBase::mjGEOM_BOX).with_size([0.2, 0.2, 0.2]).with_rgba([1.0, 0.0, 0.0, 1.0]).with_mass(1.0);
     body1.add_site().with_name("box1_site").with_pos([0.0, 0.0, 0.2]);
     log::info!("  Added box1");
   
     // Body 2: Sliding box
     let body2 = world.add_body().with_name("box2").with_pos([0.0, 0.0, 1.5]);
     body2.add_joint().with_name("box2_joint").with_type(MjtJoint::mjJNT_SLIDE).with_axis([0.0, 0.0, 1.0]);
-    body2.add_geom().with_name("box2_geom").with_type(MjtGeom::mjGEOM_BOX).with_size([0.1, 0.1, 0.1]).with_rgba([0.0, 1.0, 0.0, 1.0]).with_mass(0.5);
+    body2.add_geom().with_name("box2_geom").with_type(MjtGeomBase::mjGEOM_BOX).with_size([0.1, 0.1, 0.1]).with_rgba([0.0, 1.0, 0.0, 1.0]).with_mass(0.5);
     body2.add_site().with_name("box2_site").with_pos([0.0, 0.0, 0.0]);
     log::info!("  Added box2");
   
@@ -51,13 +51,13 @@ fn build_model() -> MjModel {
     spec.add_sensor()
         .with_name("box2_pos_sensor")
         .with_type(MjtSensor::mjSENS_JOINTPOS)
-        .with_objtype(MjtObj::mjOBJ_JOINT)
+        .with_objtype(MjtObjBase::mjOBJ_JOINT)
         .with_objname("box2_joint");
   
     spec.add_sensor()
         .with_name("box1_accel")
         .with_type(MjtSensor::mjSENS_ACCELEROMETER)
-        .with_objtype(MjtObj::mjOBJ_SITE)
+        .with_objtype(MjtObjBase::mjOBJ_SITE)
         .with_objname("box1_site");
   
     match spec.compile() {
@@ -77,8 +77,8 @@ fn test_basic_getters(model: &MjModel) {
     assert_eq!(model.ffi().nbody, 3);
     assert_eq!(model.ffi().ngeom, 3);
 
-    let motor_id = model.name_to_id(MjtObj::mjOBJ_ACTUATOR, "box2_motor").unwrap();
-    let motor_name = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, motor_id).unwrap();
+    let motor_id = model.name_to_id(MjtObjBase::mjOBJ_ACTUATOR, "box2_motor").unwrap();
+    let motor_name = model.id_to_name(MjtObjBase::mjOBJ_ACTUATOR, motor_id).unwrap();
     assert_eq!(motor_name, "box2_motor");
 
     let qpos0 = model.qpos0();
@@ -87,14 +87,14 @@ fn test_basic_getters(model: &MjModel) {
 
 fn test_simulation_and_sensors<'a>(model: &'a MjModel, data: &mut MjData<&'a MjModel>) {
     log::info!("Stepping simulation and testing sensors...");
-    let motor_id = model.name_to_id(MjtObj::mjOBJ_ACTUATOR, "box2_motor").unwrap();
+    let motor_id = model.name_to_id(MjtObjBase::mjOBJ_ACTUATOR, "box2_motor").unwrap();
     for _ in 0..10 {
         data.ctrl_mut()[motor_id] = 1.0;
         data.step();
     }
     
     data.sensor_pos();
-    let sensor_id = model.name_to_id(MjtObj::mjOBJ_SENSOR, "box2_pos_sensor").unwrap();
+    let sensor_id = model.name_to_id(MjtObjBase::mjOBJ_SENSOR, "box2_pos_sensor").unwrap();
     // box2_pos_sensor is mjSENS_JOINTPOS (dim=1)
     let sensor_data: [f64; 1] = data.read_sensor_fixed(sensor_id, 0.0, 0);
     assert!(!sensor_data.is_empty());
@@ -105,8 +105,8 @@ fn test_kinematics_and_jacobians<'a>(model: &'a MjModel, data: &mut MjData<&'a M
     data.kinematics();
     data.com_pos();
     
-    let site_id = model.name_to_id(MjtObj::mjOBJ_SITE, "box1_site").unwrap();
-    let box1_body_id = model.name_to_id(MjtObj::mjOBJ_BODY, "box1").unwrap();
+    let site_id = model.name_to_id(MjtObjBase::mjOBJ_SITE, "box1_site").unwrap();
+    let box1_body_id = model.name_to_id(MjtObjBase::mjOBJ_BODY, "box1").unwrap();
     
     let (jacp, jacr) = data.jac_site(true, true, site_id);
     assert_eq!(jacp.len(), 3 * model.ffi().nv as usize);
@@ -116,14 +116,14 @@ fn test_kinematics_and_jacobians<'a>(model: &'a MjModel, data: &mut MjData<&'a M
     assert_eq!(jacp_body.len(), 3 * model.ffi().nv as usize);
 
     log::info!("Testing object velocity/acceleration...");
-    let vel = data.object_velocity(MjtObj::mjOBJ_BODY, box1_body_id, false);
+    let vel = data.object_velocity(MjtObjBase::mjOBJ_BODY, box1_body_id, false);
     assert_eq!(vel.len(), 6);
     
     data.fwd_position();
     data.fwd_velocity();
     data.fwd_actuation();
     data.fwd_acceleration();
-    let acc = data.object_acceleration(MjtObj::mjOBJ_BODY, box1_body_id, false);
+    let acc = data.object_acceleration(MjtObjBase::mjOBJ_BODY, box1_body_id, false);
     assert_eq!(acc.len(), 6);
     
     let am_mat = data.angmom_mat(box1_body_id);
@@ -206,11 +206,11 @@ fn test_iterators_and_views(model: &MjModel, data: &mut MjData<&MjModel>) {
     
     // MjModel "iteration" via indices
     for i in 0..model.ffi().nbody {
-        let name = model.id_to_name(MjtObj::mjOBJ_BODY, i as usize).unwrap_or("unnamed");
+        let name = model.id_to_name(MjtObjBase::mjOBJ_BODY, i as usize).unwrap_or("unnamed");
         assert!(!name.is_empty());
     }
     for i in 0..model.ffi().njnt {
-        let name = model.id_to_name(MjtObj::mjOBJ_JOINT, i as usize).unwrap_or("unnamed");
+        let name = model.id_to_name(MjtObjBase::mjOBJ_JOINT, i as usize).unwrap_or("unnamed");
         assert!(!name.is_empty());
     }
     // Data named accessors and views

@@ -215,10 +215,13 @@ Three independent evaluators each read all Phase 2-3 reports and:
 - Deduplicate identical findings (same file + same issue).
 - Assign final severity: Critical / High / Medium / Low / Info.
 - Flag false positives.
+- Assign the origin section: A or B (see the Deliverable).
 
 Majority-vote on severity; take the highest severity when votes are split.
 
 ### Phase 5 -- FIX (single agent, sequential)
+
+Write the repro examples (see "Repro examples") before this phase, so that they exercise the unfixed code.
 
 A single agent applies all Critical and High fixes in sequence:
 
@@ -259,6 +262,27 @@ Substitute `X.Y.Z` from the `+mj-X.Y.Z` suffix in `Cargo.toml`. Both vars must b
 `important-context.md`. For `cargo check` (type-checking only, no link), only
 `MUJOCO_DYNAMIC_LINK_DIR` is strictly required.
 
+## Repro examples
+
+Write one runnable reproduction example per confirmed finding, after the IDs are final. The user
+keeps and runs them, so do not delete them.
+
+1. Make sure `.git/info/excludes` contains `/examples/repro_*.rs`. If it does not, append it with a comment
+   that marks it temporary ("remove before commit"), and tell the user.
+2. Write `examples/repro_verify_<ID>.rs` (`<ID>` is `V1`, `V2`, ...). Use the public crate API
+   (`use mujoco_rs::prelude::*`, an inline MJCF model). Do not register it in `Cargo.toml`; Cargo
+   discovers it.
+3. Start the file with a `//!` header: the ID, the problem in one line, the exact run command (env
+   vars and `--features`), and the expected symptom. The example prints the wrong value next to an
+   independently derived expected value, or triggers the panic or abort.
+4. `cargo check --example repro_verify_<ID>` must pass. Run it with `timeout 60` when this machine
+   can, and record the result.
+5. Add a `Repro:` field (file and run command) to each detail entry of the report.
+
+Only `repro_verify_<ID>*.rs` files stay in `examples/`. Name any intermediate probe
+`examples/repro_tmpcheck_<tag>.rs` and delete it after use. Move any other leftover probe to
+`~/.cache/mujoco-rs-results/<agent>-<task>/`.
+
 ## Deliverable -- a single self-contained HTML report
 
 Write/overwrite `mujoco-rs-verify-report.html` at the repo root after Phase 5 (fixes applied).
@@ -277,21 +301,58 @@ Concretely:
 
 The file must be self-contained (inline `<style>`), ASCII-only, and contain:
 
-- A header and a short **method note** describing the phases and the ten concern groups (A-J).
-- An **overview table** of all findings accumulated this chat:
-  `ID | Severity (pill) | Category (badge) | One-line description | Location | Fix applied? | Status`
-  If no findings exist, the table says "No bugs confirmed in this session."
-- One **finding card** per finding: ID, severity, title, status badge, location,
-  a **concise (< 300 words)** description quoting both the Rust code value and the C reference
-  value, and a **"Fix"** section describing what was changed (or what needs to change).
-- A **"Confirmed OK"** section listing notable items that were checked and found correct
-  (file:line, what was verified, result).
+**Two origin sections.** Split both the compact list and the detail list into two sections, each
+grouped by severity inside. Assign the origin when the finding is classified, not after the report.
+
+- **A. Our wrappers / usage**: the defect is in our code. Examples: a wrong length or contract, a
+  missing `(read = unsafe)` / `(mut = unsafe)` marking, an unsound `Send`/`Sync`, a viewer or
+  renderer logic bug, a `build.rs` bug.
+- **B. Inadequate MuJoCo checks**: MuJoCo accepts an invalid input or state without validation, and
+  the guard must go into our wrapper. Examples: an `int` overflow in a size product, an unchecked
+  index or format string, no stage-order check.
+
+Headings: `1A. Compact list: Our wrappers / usage`, `1B. Compact list: Inadequate MuJoCo checks`,
+`2A. Details: ...`, `2B. Details: ...`. Omit empty severity groups. Write "None." for an empty
+section.
+
+**No prose anywhere in the report**: no method note, no introduction, no paragraphs. Only the
+lists below. Every description is a fragment of at most ~8 words.
+
+1. **Compact list** (top of page) of all findings accumulated this chat, grouped by severity
+   (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO`; omit empty groups). One line per finding:
+   `ID  file:line  item: problem  [status]`. Each ID links to its detail entry. If no findings
+   exist, the list is the single line "No bugs confirmed in this session."
+
+   ```
+   HIGH
+     V1  mj_data.rs:640    xquat: stride 3, C says 4               [open]
+   LOW
+     V2  mj_model.rs:2210  jnt_range: length nbody, C says njnt    [fixed]
+   ```
+
+2. **Detail list** (below), one entry per finding, same order. Header line
+   `ID  SEVERITY  category  status` (category: concern group `A`-`J`), then labeled fields,
+   each at most one line except quoted code:
+
+   ```
+   V1  HIGH  B  open
+   Where:   src/wrappers/mj_data.rs:640 (info_method! Body, xquat)
+   Problem: quaternion read with stride 3; every body after 0 is misaligned.
+   Rust:    xquat: 3
+   C:       mjtNum* xquat;  // (nbody x 4)   mjdata.h:211
+   Fix:     change the stride to 4.
+   ```
+
+   `Fix` states what changed (`Fixed`) or what must change (`Open`, `Wont Fix`).
+
+3. **Confirmed OK**: one line each, `file:line  item  -> OK (what was checked)`, inside a
+   `details` element.
 
 Styling: use the same Claude aesthetic as `mujoco-rs-memory-safety-audit.html` -- ivory canvas
-background, coral accent, warm near-black ink, Georgia serif headings, rounded pill badges, white
-finding cards on the canvas, and a hairline-border overview table. Severity pills
-(`sev-critical/high/medium/low/info`), status badges (`st-open` / `st-fixed` / `st-wont-fix`),
-category badges `cat-a` through `cat-j` each in a distinct hue.
+background, coral accent, warm near-black ink, Georgia serif headings. Render both lists in a
+monospace font on white blocks, with the columns aligned. Color the severity group headings
+(`sev-critical/high/medium/low/info`) and the status tags (`st-open` / `st-fixed` /
+`st-wont-fix`).
 
 Statuses:
 
@@ -301,4 +362,4 @@ Statuses:
 | **Fixed** | Fix was applied in Phase 5 of this or a prior run this chat |
 | **Wont Fix** | Confirmed but intentionally deferred (e.g. upstream MuJoCo issue) |
 
-After writing the file, present the overview table to the user as a plain-text summary.
+After writing the file, present the compact list to the user verbatim, with no added prose.

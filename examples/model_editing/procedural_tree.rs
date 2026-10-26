@@ -5,7 +5,7 @@
 //! Set `opt.wind` in `build_tree` to a non-zero value to make them sway.
 //!
 //! Adapted from the MuJoCo mjspec tutorial:
-//! https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb
+//! https://colab.research.google.com/github/google-deepmind/mujoco/blob/3.17.0/python/mjspec.ipynb
 
 use std::time::Duration;
 use mujoco_rs::prelude::*;
@@ -50,7 +50,7 @@ fn grow(parent: &mut MjsBody, depth: usize, len: f64, r: f64, dir: [f64; 3], att
     body.add_joint().with_type(MjtJoint::mjJNT_BALL);
 
     body.add_geom()
-        .with_type(MjtGeom::mjGEOM_CAPSULE)
+        .with_type(MjtGeomBase::mjGEOM_CAPSULE)
         .with_fromto([0.0, 0.0, 0.0, 0.0, 0.0, len])
         .with_size([r, 0.0, 0.0])
         .with_rgba(BROWN);
@@ -64,7 +64,7 @@ fn grow(parent: &mut MjsBody, depth: usize, len: f64, r: f64, dir: [f64; 3], att
             let ly = 0.45 * len * angle_rad.sin();
             // Place leaf just beyond the capsule tip: z = len + r (capsule end + cap radius).
             let leaf = body.add_geom()
-                .with_type(MjtGeom::mjGEOM_ELLIPSOID)
+                .with_type(MjtGeomBase::mjGEOM_ELLIPSOID)
                 .with_pos([lx, ly, len + r])
                 .with_size([0.5 * len, 0.15 * len, 0.01 * len])
                 .with_rgba(GREEN);
@@ -104,7 +104,7 @@ fn build_tree() -> MjModel {
     let world = spec.world_body_mut();
 
     world.add_geom()
-        .with_type(MjtGeom::mjGEOM_PLANE)
+        .with_type(MjtGeomBase::mjGEOM_PLANE)
         .with_size([5.0, 5.0, 0.01]);
 
     world.add_light()
@@ -116,7 +116,7 @@ fn build_tree() -> MjModel {
 
     let trunk = world.add_body().with_name("trunk");
     trunk.add_geom()
-        .with_type(MjtGeom::mjGEOM_CAPSULE)
+        .with_type(MjtGeomBase::mjGEOM_CAPSULE)
         .with_fromto([0.0, 0.0, 0.0, 0.0, 0.0, trunk_len])
         .with_size([trunk_r, 0.0, 0.0])
         .with_rgba(BROWN);

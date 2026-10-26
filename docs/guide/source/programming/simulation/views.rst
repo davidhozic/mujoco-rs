@@ -7,7 +7,7 @@ Attribute views
 The MuJoCo library stores data about joints, bodies, and other elements in contiguous arrays.
 These can be challenging to work with, particularly when the array's length varies between elements.
 For example, different types of joints may have a different number of degrees of freedom.
-`MuJoCo's Python bindings <https://mujoco.readthedocs.io/en/3.12.0/python.html>`_ solve
+`MuJoCo's Python bindings <https://mujoco.readthedocs.io/en/3.17.0/python.html>`_ solve
 this issue by providing views to specific ranges in the corresponding arrays.
 
 Like MuJoCo's Python bindings, MuJoCo-rs also provides views. Specifically, we provide views for
@@ -24,8 +24,10 @@ number of entries that each element owns inside them.
 
     Cached info structs are tied to the model layout they were created from.
     Calling ``view()`` / ``view_mut()`` with data from an incompatible model
-    will panic. Two models are compatible when they agree on every size and on
-    the way each element splits those sizes.
+    will panic. Two models are compatible when
+    :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`
+    returns ``true``: they agree on every size and on every integer table that no safe accessor
+    can write (for example, the material of each geom).
     Use ``try_view()`` / ``try_view_mut()`` if you want to handle mismatches
     as ``Result`` values instead of panicking.
 

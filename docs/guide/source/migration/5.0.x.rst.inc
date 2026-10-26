@@ -17,11 +17,11 @@ and update your library path. See :ref:`installation` for details.
 
 ``SpecItem::element_pointer`` pointer type changed (potentially breaking)
 --------------------------------------------------------------------------
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<tymethod>element_pointer`
+:docs-rs:`SpecItem::element_pointer <mujoco_rs::wrappers::mj_editing::<trait>SpecElement::<tymethod>element_pointer>`
 now returns ``*const mjsElement`` (was ``*mut mjsElement``) and is no longer ``unsafe``. This only
 affects code that called the model-editing trait methods directly (e.g. to drive MuJoCo's C
 model-editing API). When a mutable pointer is required, use
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>element_mut_pointer`
+:docs-rs:`SpecItem::element_mut_pointer <mujoco_rs::wrappers::mj_editing::<trait>SpecElement::<method>element_mut_pointer>`
 (also no longer ``unsafe``). Any ``unsafe`` block wrapping these calls is now redundant and can be
 removed.
 

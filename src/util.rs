@@ -1,12 +1,13 @@
 //! Utility types and macros used throughout the crate.
-use std::{marker::PhantomData, ops::{Deref, DerefMut}};
+use std::{ffi::CStr, marker::PhantomData, ops::{Deref, DerefMut}};
 use std::sync::{Mutex, MutexGuard};
 use std::ffi::{CString, c_char};
 use std::any::type_name;
+use std::fmt::Display;
 
 use crate::mujoco_c::{mj_version, mjVERSION_HEADER};
 
-/// Helpers that only the generated sanitizer probes use.
+/// Helpers for the generated sanitizer probes, and fixtures for the in-crate tests.
 #[cfg(test)]
 pub(crate) mod testing;
 
@@ -37,6 +38,15 @@ pub(crate) fn write_ascii_to_buf(buf: &mut [c_char], value: &str) {
 /// Panics if `msg` contains interior `\0` characters.
 pub(crate) fn printf_safe_cstring(msg: &str) -> CString {
     CString::new(msg.replace('%', "%%")).unwrap()
+}
+
+/// Copies the C string at `c_str` into a new [`String`], replacing invalid UTF-8 with
+/// `U+FFFD`.
+///
+/// # Safety
+/// `c_str` must be non-null and point to a NULL-terminated string that is valid for reads.
+pub(crate) unsafe fn string_from_c(c_str: *const c_char) -> String {
+    unsafe { CStr::from_ptr(c_str).to_string_lossy().into_owned() }
 }
 
 /// Returns `Some((start, len))` for item `id` inside a packed data array,
@@ -80,13 +90,13 @@ where
     Some((adr, len))
 }
 
-/// Converts a buffer length into the element count type `T` that MuJoCo takes.
+/// Converts a length, size or id into the integer type `T` that MuJoCo takes.
 ///
 /// # Panics
 /// Panics if `len` does not fit in `T`.
-pub(crate) fn checked_c_len<T: TryFrom<usize>>(len: usize) -> T {
+pub(crate) fn checked_c_len<T: TryFrom<U>, U: Copy + Display>(len: U) -> T {
     T::try_from(len).unwrap_or_else(
-        |_| panic!("length {len} exceeds the MuJoCo {} element count", type_name::<T>())
+        |_| panic!("value {len} does not fit in MuJoCo's {} argument", type_name::<T>())
     )
 }
 
@@ -436,7 +446,7 @@ macro_rules! info_method {
             #[allow(non_snake_case)]
             pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel $info_type Info>]> {
                 let model_ref = self$(.$model())?;
-                let id = model_ref.name_to_id(MjtObj::[<mjOBJ_ $type_:upper>], name)?;
+                let id = model_ref.name_to_id(MjtObjBase::[<mjOBJ_ $type_:upper>], name)?;
                 #[allow(unused)]
                 let model_ffi = model_ref.ffi();
 
@@ -466,7 +476,7 @@ macro_rules! info_method {
 
 
 /// Generates `Info`, `ViewMut`, and `View` types for a named MuJoCo object, along with
-/// `view`, `try_view`, `view_mut`, `try_view_mut` and `model_signature` on the `Info` type and
+/// `view`, `try_view`, `view_mut` and `try_view_mut` on the `Info` type and
 /// `zero` on `ViewMut`. A trailing `, Generic: Bound` (`M: ModelType`) is required
 /// when the target wrapper is generic, as `MjData<M>` is.
 ///
@@ -518,11 +528,6 @@ macro_rules! info_with_view {
             }
 
             impl [<Mj $name:camel $info_type Info>] {
-                /// Returns the model signature this `Info` was created from.
-                pub fn model_signature(&self) -> u64 {
-                    self.model_layout.signature()
-                }
-
                 #[doc = concat!(
                     "Re-points this `Info` at the layout of `", stringify!([<$info_type:lower>]), "`.\n\n",
                     "A compatible model holds the same index ranges, so the cached ranges stay correct and only ",
@@ -536,8 +541,8 @@ macro_rules! info_with_view {
                     let destination_layout = [<$info_type:lower>].layout();
                     if self.model_layout != *destination_layout {
                         return Err($crate::error::[<Mj $info_type Error>]::IncompatibleModel {
-                            source: self.model_layout.signature(),
-                            destination: destination_layout.signature(),
+                            source: std::sync::Arc::clone(&self.model_layout),
+                            destination: std::sync::Arc::clone(destination_layout),
                         });
                     }
                     self.model_layout = std::sync::Arc::clone(destination_layout);
@@ -560,8 +565,8 @@ macro_rules! info_with_view {
                     let destination_layout = [<$info_type:lower>].layout();
                     if self.model_layout != *destination_layout {
                         return Err($crate::error::[<Mj $info_type Error>]::IncompatibleModel {
-                            source: self.model_layout.signature(),
-                            destination: destination_layout.signature(),
+                            source: std::sync::Arc::clone(&self.model_layout),
+                            destination: std::sync::Arc::clone(destination_layout),
                         });
                     }
                     Ok(view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(),
@@ -602,8 +607,8 @@ macro_rules! info_with_view {
                     let destination_layout = [<$info_type:lower>].layout();
                     if self.model_layout != *destination_layout {
                         return Err($crate::error::[<Mj $info_type Error>]::IncompatibleModel {
-                            source: self.model_layout.signature(),
-                            destination: destination_layout.signature(),
+                            source: std::sync::Arc::clone(&self.model_layout),
+                            destination: std::sync::Arc::clone(destination_layout),
                         });
                     }
                     Ok(view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(),
@@ -1339,15 +1344,17 @@ mod tests {
     #[test]
     fn test_checked_c_len_accepts_the_boundary() {
         // The C count is a signed int, so i32::MAX itself is still exact.
-        assert_eq!(checked_c_len::<i32>(i32::MAX as usize), i32::MAX);
+        assert_eq!(checked_c_len::<i32, _>(i32::MAX as usize), i32::MAX);
         // A wider count type must accept what the narrower one rejects.
-        assert_eq!(checked_c_len::<i64>(i32::MAX as usize + 1), i32::MAX as i64 + 1);
+        assert_eq!(checked_c_len::<i64, _>(i32::MAX as usize + 1), i32::MAX as i64 + 1);
+        // A u32 source uses the same boundary as a usize source.
+        assert_eq!(checked_c_len::<i32, _>(i32::MAX as u32), i32::MAX);
     }
 
     #[test]
     #[should_panic]
     fn test_checked_c_len_rejects_above_the_boundary() {
-        checked_c_len::<i32>(i32::MAX as usize + 1);
+        checked_c_len::<i32, _>(i32::MAX as usize + 1);
     }
 
     /// Verifies that `lock_unpoison` recovers a poisoned mutex and preserves the inner value.

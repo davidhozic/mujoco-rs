@@ -189,7 +189,7 @@ fn create_model() -> MjModel {
     tex.set_data(&vec![128u8; TEX_SIZE * TEX_SIZE * 3]);
 
     let mat = spec.add_material().with_name("tex_mat");
-    mat.set_texture(MjtTextureRole::mjTEXROLE_RGB, "wave_tex");
+    mat.set_texture(MjtTextureRoleBase::mjTEXROLE_RGB, "wave_tex");
 
     /* Wave mesh */
     let n = MESH_N + 1;
@@ -232,7 +232,7 @@ fn create_model() -> MjModel {
 
     world
         .add_geom()
-        .with_type(MjtGeom::mjGEOM_HFIELD)
+        .with_type(MjtGeomBase::mjGEOM_HFIELD)
         .with_pos([0.0, 0.0, 0.0])
         .with_hfieldname("terrain");
 
@@ -240,7 +240,7 @@ fn create_model() -> MjModel {
     ball.with_name("ball").with_pos([0.0, 0.0, 3.5]);
     ball.add_joint().with_type(MjtJoint::mjJNT_FREE);
     ball.add_geom()
-        .with_type(MjtGeom::mjGEOM_SPHERE)
+        .with_type(MjtGeomBase::mjGEOM_SPHERE)
         .with_size([0.3, 0.0, 0.0])
         .with_material("tex_mat");
 
@@ -249,7 +249,7 @@ fn create_model() -> MjModel {
         .with_name("wave_body")
         .with_pos([3.0, 0.0, 2.0])
         .add_geom()
-        .with_type(MjtGeom::mjGEOM_MESH)
+        .with_type(MjtGeomBase::mjGEOM_MESH)
         .with_meshname("wave")
         .with_rgba([0.3, 0.7, 1.0, 1.0]);
 

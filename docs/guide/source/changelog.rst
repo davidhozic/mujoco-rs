@@ -20,6 +20,7 @@ Changelog
 .. |mjs_light| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsLight`
 .. |mjs_actuator| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsActuator`
 .. |mjs_plugin| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsPlugin`
+.. |mj_viewer_cpp| replace:: :docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp`
 
 
 This page contains the summary of changes made throughout different releases of the MuJoCo-rs crate.
@@ -42,6 +43,7 @@ update of MuJoCo alone can increase the major version.
 
 .. Each release group lives in its own fragment. Add a new release at the top of the list.
 
+.. include:: changelog/7.0.x.rst.inc
 .. include:: changelog/6.1.x.rst.inc
 .. include:: changelog/6.0.x.rst.inc
 .. include:: changelog/5.0.x.rst.inc

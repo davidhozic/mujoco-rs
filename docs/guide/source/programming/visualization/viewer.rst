@@ -35,7 +35,7 @@ A screenshot of the Rust 3D viewer is shown below.
 
     Rust-native interactive 3D viewer.
     Showing the `Spot <https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot>`_ scene from
-    `MuJoCo's menagerie <https://mujoco.readthedocs.io/en/3.12.0/models.html>`_.
+    `MuJoCo's menagerie <https://mujoco.readthedocs.io/en/3.17.0/models.html>`_.
 
 The viewer can be launched only in **passive mode**, i.e. it won't run as a separate application,
 and needs to be periodically "synced" by the user application.
@@ -209,7 +209,7 @@ on how to use the viewer in a multi-threaded way:
         .window_name("My Threaded Simulation")  // text shown in the window title bar.
         .max_user_geoms(100)
         .vsync(true)  // let the viewer select the appropriate refresh rate.
-        .build_passive(model.clone())
+        .build_passive(&model)
         .expect("could not launch the viewer");
 
     let shared_state = viewer.state().clone();
@@ -467,13 +467,9 @@ The changes to the viewer are made to allow viewer rendering in a user-controlle
 
 .. attention::
 
-    To avoid a major rewrite of the C++ viewer,
-    the latter is given raw, mutable pointers to both :docs-rs:`mujoco_rs::mujoco_c::<type>mjModel`
-    and :docs-rs:`mujoco_rs::mujoco_c::<type>mjData`, which are wrapped inside
-    :docs-rs:`mujoco_rs::wrappers::mj_model::<struct>MjModel`
-    and :docs-rs:`mujoco_rs::wrappers::mj_data::<struct>MjData`, respectively.
-    As a result, Rust's borrow-checker rules are violated. Although incorrect behavior is unlikely,
-    caution is advised.
+    The viewer owns the |mj_data| and gives access to it through
+    :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>state`, which returns the
+    shared :docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjCppViewerSharedState`.
 
     It is strongly **recommended** to use the :ref:`rust_native_viewer` when none of the
     C++ viewer's features are required.
@@ -485,21 +481,25 @@ Here is an example of using the C++ wrapper:
     use std::time::Duration;
 
     use mujoco_rs::cpp_viewer::MjViewerCpp;
+    use mujoco_rs::util::LockUnpoison;
     use mujoco_rs::prelude::*;
 
     const EXAMPLE_MODEL: &str = r#"<mujoco><worldbody/></mujoco>"#;
 
     fn main() {
-        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
-        let mut data = MjData::new(&model);
-        // SAFETY: model and data are kept alive and at a stable address.
-        let mut viewer = unsafe { MjViewerCpp::launch_passive(&model, &data, 100) };
+        let model = Box::new(MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model"));
         let step = model.opt().timestep;
+        // SAFETY: called from the main thread.
+        let mut viewer = unsafe { MjViewerCpp::launch_passive(MjData::new(model), 100) };
+        let state = viewer.state().clone();
         while viewer.running() {
-            viewer.sync();
-            // SAFETY: called from the main thread.
-            unsafe { viewer.render().unwrap() };
-            data.step();
+            {
+                let mut lock = state.lock_unpoison();
+                // SAFETY: the data is only stepped, never replaced.
+                unsafe { lock.data_mut() }.step();
+                lock.sync();
+            }
+            viewer.render().unwrap();
             std::thread::sleep(Duration::from_secs_f64(step));
         }
     }
@@ -507,4 +507,6 @@ Here is an example of using the C++ wrapper:
 
 Unlike the Rust-native viewer, the C++ wrapper's
 :docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync` does not take a ``data``
-parameter; it uses the raw pointer passed at construction time.
+parameter, because the viewer owns the data. To sync from a different thread, call
+:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjCppViewerSharedState::<method>sync` through the
+handle that ``state`` returns.

@@ -1,7 +1,7 @@
 //! The example shows how to procedurally generate terrain.
 //! It generates a terrain of stair regions.
 //! The example is adapted from the MuJoCo Python's model editing tutorial:
-//! https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb#scrollTo=P2F0ObC2T8w8&line=40&uniqifier=1
+//! https://colab.research.google.com/github/google-deepmind/mujoco/blob/3.17.0/python/mjspec.ipynb#scrollTo=P2F0ObC2T8w8&line=40&uniqifier=1
 //! 
 //! This example uses the viewer in single-threaded fashion.
 use mujoco_rs::viewer::MjViewer;
@@ -62,7 +62,7 @@ fn create_model() -> MjModel {
     let main_class = spec.default_mut("main").unwrap();
     main_class.geom_mut()
         .with_solref([timeconst, 0.5])
-        .with_type(MjtGeom::mjGEOM_BOX);
+        .with_type(MjtGeomBase::mjGEOM_BOX);
 
 
     // Create lights
@@ -95,7 +95,7 @@ fn create_model() -> MjModel {
 
 /// Generates a body of stair shape.
 /// This is adapted from MuJoCo Python's model editing tutorial:
-/// https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb#scrollTo=dtFWSSwWSgeD&line=1&uniqifier=1
+/// https://colab.research.google.com/github/google-deepmind/mujoco/blob/3.17.0/python/mjspec.ipynb#scrollTo=dtFWSSwWSgeD&line=1&uniqifier=1
 fn stairs(spec: &mut MjSpec, grid_loc: [f64; 2] , num_stairs: u32, direction: i8, name: &str) {
     const SQUARE_LENGTH: f64 = 2.0;
     const V_SIZE: f64 = 0.076;
@@ -168,7 +168,7 @@ fn connected_spheres(spec: &mut MjSpec) {
             let ball = world.add_body()
                 .with_pos([i as f64 * 0.5, j as f64 * 0.5, 5.0]);
             ball.add_geom()
-                .with_type(MjtGeom::mjGEOM_SPHERE)
+                .with_type(MjtGeomBase::mjGEOM_SPHERE)
                 .with_size([0.1, 0.0, 0.0])
                 .with_mass(0.001);
 

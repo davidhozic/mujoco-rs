@@ -54,7 +54,7 @@ fn create_model() -> MjModel {
 
     // Create a plane
     let plane_geom = world.add_geom()
-        .with_type(MjtGeom::mjGEOM_PLANE)
+        .with_type(MjtGeomBase::mjGEOM_PLANE)
         .with_size([2.0, 2.0, 1.0]);
 
     plane_geom.alt_mut().set_euler(&[2.0, 0.0, 0.0]);  // two degrees
@@ -79,7 +79,7 @@ fn create_model() -> MjModel {
                 .with_axis([0.0, 1.0, 0.0]);
 
             child.add_geom()
-                .with_type(MjtGeom::mjGEOM_CAPSULE)
+                .with_type(MjtGeomBase::mjGEOM_CAPSULE)
                 .with_size([0.015, 0.0, 0.0])
                 .with_fromto([0.0, 0.0, 0.0, LINK_LENGTH, 0.0, 0.0]);
 
