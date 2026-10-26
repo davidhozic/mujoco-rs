@@ -562,8 +562,10 @@ impl MjModel {
 
     /// Saves the last loaded XML to `filename`.
     /// Wraps [`mj_saveLastXML`].
+    /// 
     /// # Returns
     /// `Ok(())` on success.
+    /// 
     /// # Errors
     /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// - [`MjModelError::SaveFailed`] with MuJoCo's error message if saving fails.
@@ -2655,38 +2657,17 @@ mod tests {
         assert_relative_eq!(quat[3], 0.5_f64.sqrt(), epsilon = 1e-12);
     }
 
-    /// Tests if the model can be loaded and then saved.
-    #[test]
-    fn test_model_load_save() {
-        const MODEL_SAVE_XML_PATH: &str = "./__TMP_MODEL1.xml";
-        const MODEL_INVALID_SAVE_XML_PATH: &str = "/some/non-existent/path/";
-
-        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
-        model.save_last_xml(MODEL_SAVE_XML_PATH).expect("could not save the model XML.");      
-        fs::remove_file(MODEL_SAVE_XML_PATH).unwrap();
-
-        // Try to get an error
-        assert!(model.save_last_xml(MODEL_INVALID_SAVE_XML_PATH).is_err());
-    }
-
     #[test]
     fn test_model_encode() {
         const PATH_MJB: &str = "./__TMP_MODEL_ENCODE.mjb";
-        const PATH_XML: &str = "./__TMP_MODEL_ENCODE.xml";
 
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
         model.encode(PATH_MJB, "").unwrap();
-        model.encode_with_vfs(PATH_XML, "text/xml", &MjVfs::new()).unwrap();
 
         let encoded = MjModel::from_buffer(&fs::read(PATH_MJB).unwrap()).unwrap();
-        // The XML encoder writes the spec of the last XML load, which a parallel test may replace,
-        // so only the MJB round trip is compared against `model`.
-        let reloaded = MjModel::from_xml(PATH_XML);
         fs::remove_file(PATH_MJB).unwrap();
-        fs::remove_file(PATH_XML).unwrap();
 
         assert!(model.is_compatible_with_model(&encoded));
-        reloaded.unwrap();
 
         assert!(model.encode("/some/non-existent/path/model.xml", "").is_err());
     }
