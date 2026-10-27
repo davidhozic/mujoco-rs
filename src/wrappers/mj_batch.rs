@@ -32,7 +32,10 @@ use std::slice::{ChunksExact, ChunksExactMut};
 use std::ptr::{self, NonNull};
 use std::mem::MaybeUninit;
 
-use crate::mujoco_c::{mjBatch, mjBatchConfig, mjb_defaultConfig, mjb_deleteBatch, mjb_makeBatch, mjb_nstate, mjb_state, mjb_step};
+use crate::mujoco_c::{
+    mjBatch, mjBatchConfig, mjb_defaultConfig, mjb_makeBatch, mjb_deleteBatch,
+    mjb_nstate, mjb_state, mjb_step, mjb_forward, mjb_reset, mjb_nthread, mjb_persistent
+};
 use crate::util::{ERROR_BUF_LEN, checked_c_len, string_from_c};
 use crate::wrappers::mj_model::{MjModel, MjtStage};
 use crate::wrappers::mj_primitive::MjtNum;
@@ -98,6 +101,22 @@ impl MjBatch {
 
     /// Returns number of simulation instances used in the batch.
     pub fn num_sim(&self) -> usize { self.num_sim }
+
+    /// Returns number of threads used in the batch, including the caller's.
+    /// Wraps [`mjb_nthread`].
+    pub fn num_thread(&self) -> usize {
+        // SAFETY: handle is always valid while this MjBatch exists.
+        //         The returned value is always >= 1, thus converting to usize is safe as well.
+        unsafe { mjb_nthread(self.handle.as_ptr()) as usize }
+    }
+
+    /// Returns `true` if the batch keeps one [`MjData`](crate::wrappers::mj_data::MjData) per
+    /// simulation instance, `false` if it keeps one per thread.
+    /// Wraps [`mjb_persistent`].
+    pub fn persistent(&self) -> bool {
+        // SAFETY: handle is always valid while this MjBatch exists.
+        unsafe { mjb_persistent(self.handle.as_ptr()) != 0 }
+    }
 
     /// Returns the size of the state vector of a single instance within this batch.
     /// Wraps [`mjb_nstate`].
@@ -165,12 +184,60 @@ impl MjBatch {
     /// 
     /// # Panics
     /// Panics if `ids.len()` or `num_steps` exceeds [`i32::MAX`].
-    pub fn step(&mut self, ids: &[i32], num_steps: u32, stage: MjtStage) -> u32 {
-        // SAFETY: handle is always valid here, ids are of correct type and have checked length,
-        //         num_steps have checked length, casting stage to i32 can't overflow.
+    pub fn step(&mut self, ids: &[u32], num_steps: u32, stage: MjtStage) -> u32 {
+        // SAFETY: handle is always valid here, ids and num_steps have checked length, u32 has
+        //         the same layout as i32, casting stage to i32 can't overflow.
         unsafe { mjb_step(
-            self.handle.as_ptr(), ids.as_ptr(),
+            self.handle.as_ptr(), ids.as_ptr() as *const i32,
             checked_c_len(ids.len()), checked_c_len(num_steps),
+            stage as i32
+        ) as u32 }
+    }
+
+    /// Compute [`MjData::forward`](crate::wrappers::mj_data::MjData::forward) with all stages up to
+    /// `stage` on each selected simulation.
+    /// Wraps [`mjb_forward`].
+    /// 
+    /// # Returns
+    /// Number of simulations in which MuJoCo raised an error.
+    /// 
+    /// # Panics
+    /// Panics if `ids.len()` exceeds [`i32::MAX`].
+    pub fn forward(&mut self, ids: &[u32], stage: MjtStage) -> u32 {
+        // SAFETY: handle is always valid here, ids have checked length, u32 has the same layout
+        //         as i32, casting stage to i32 can't overflow.
+        unsafe { mjb_forward(
+            self.handle.as_ptr(), ids.as_ptr() as *const i32,
+            checked_c_len(ids.len()),
+            stage as i32
+        ) as u32 }
+    }
+
+    /// Reset each selected simulation back to a specific keyframe, then compute
+    /// [`MjData::forward`](crate::wrappers::mj_data::MjData::forward) with all stages up to `stage`.
+    /// 
+    /// `keys` holds one keyframe index per element of `ids`. Giving `None` resets to the model
+    /// defaults.
+    /// Wraps [`mjb_reset`].
+    /// 
+    /// # Returns
+    /// Number of simulations in which MuJoCo raised an error.
+    /// 
+    /// # Panics
+    /// - Panics if `ids.len()` exceeds [`i32::MAX`].
+    /// - Panics if `keys` is `Some` and its length differs from `ids.len()`.
+    pub fn reset(&mut self, ids: &[u32], keys: Option<&[u32]>, stage: MjtStage) -> u32 {
+        // MuJoCo reads one key per id before it checks the keys.
+        if let Some(keys) = keys {
+            assert_eq!(keys.len(), ids.len(), "keys must have one element per id");
+        }
+
+        // SAFETY: handle is always valid here, ids and keys have checked length, u32 has the
+        //         same layout as i32, casting stage to i32 can't overflow.
+        unsafe { mjb_reset(
+            self.handle.as_ptr(), ids.as_ptr() as *const i32,
+            checked_c_len(ids.len()),
+            keys.map_or(ptr::null(), |k| k.as_ptr() as *const i32),
             stage as i32
         ) as u32 }
     }
