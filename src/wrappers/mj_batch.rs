@@ -22,24 +22,30 @@
 //! }
 //!
 //! // Modifying state
-//! batch.state_flattened_mut().fill(0.0);
-//! batch.state_at_mut(0)[0] = 1.0;
-//! for state in batch.state_chunks_mut() {
-//!     state[0] = 2.0;
+//! // SAFETY: the model has no history buffers, so no write can break a history cursor.
+//! unsafe {
+//!     batch.state_flattened_mut().fill(0.0);
+//!     batch.state_at_mut(0)[0] = 1.0;
+//!     for state in batch.state_chunks_mut() {
+//!         state[0] = 2.0;
+//!     }
 //! }
 //! ```
 use std::slice::{ChunksExact, ChunksExactMut};
 use std::ptr::{self, NonNull};
 use std::mem::MaybeUninit;
+use std::sync::Arc;
 
 use crate::mujoco_c::{
-    mjBatch, mjBatchConfig, mjb_defaultConfig, mjb_makeBatch, mjb_deleteBatch,
-    mjb_nstate, mjb_state, mjb_step, mjb_forward, mjb_reset, mjb_nthread, mjb_persistent
+    mjBatch, mjBatchConfig, mjb_defaultConfig, mjb_deleteBatch, mjb_forward, mjb_getData,
+    mjb_makeBatch, mjb_nstate, mjb_nthread, mjb_persistent, mjb_reset, mjb_state, mjb_step
 };
+use crate::wrappers::mj_model::{MjModel, MjModelLayout, MjtStage};
 use crate::util::{ERROR_BUF_LEN, checked_c_len, string_from_c};
-use crate::wrappers::mj_model::{MjModel, MjtStage};
 use crate::wrappers::mj_primitive::MjtNum;
+use crate::wrappers::traits::ModelType;
 use crate::error::MjBatchError;
+use crate::wrappers::MjData;
 
 /// The threading configuration of a batch.
 pub type MjBatchConfig = mjBatchConfig;
@@ -58,9 +64,11 @@ impl Default for MjBatchConfig {
 
 /// Wrapper around the [`mjBatch`] FFI handle.
 /// The handle is an opaque struct to many simulation instances of one model and thread-pool.
+#[derive(Debug)]
 pub struct MjBatch {
     handle: NonNull<mjBatch>,
     num_sim: usize,
+    layout: Arc<MjModelLayout>,
 }
 
 impl MjBatch {
@@ -96,7 +104,7 @@ impl MjBatch {
         // SAFETY: MuJoCo NUL-terminates the message within `error`.
         let handle = NonNull::new(ptr)
             .ok_or_else(|| MjBatchError::MakeFailed(unsafe { string_from_c(error.as_ptr()) }))?;
-        Ok(Self { handle, num_sim })
+        Ok(Self { handle, num_sim, layout: Arc::clone(model.layout()) })
     }
 
     /// Returns number of simulation instances used in the batch.
@@ -137,7 +145,11 @@ impl MjBatch {
     }
 
     /// Same as [`MjBatch::state_flattened`] but returning as mutable data.
-    pub fn state_flattened_mut(&mut self) -> &mut [MjtNum] {
+    ///
+    /// # Safety
+    /// Every history cursor in the state rows must stay an integer in `0..nsample` of its
+    /// buffer.
+    pub unsafe fn state_flattened_mut(&mut self) -> &mut [MjtNum] {
         // SAFETY: handle is always valid while this MjBatch exists. Lengths are guaranteed by MuJoCo to be correct.
         unsafe { std::slice::from_raw_parts_mut(
             mjb_state(self.handle.as_ptr()),
@@ -152,9 +164,14 @@ impl MjBatch {
     }
 
     /// Same as [`MjBatch::state_chunks`] but returning as mutable data.
-    pub fn state_chunks_mut(&mut self) -> ChunksExactMut<'_, MjtNum> {
+    ///
+    /// # Safety
+    /// Every history cursor in the state rows must stay an integer in `0..nsample` of its
+    /// buffer.
+    pub unsafe fn state_chunks_mut(&mut self) -> ChunksExactMut<'_, MjtNum> {
         let state_size = self.state_size();
-        self.state_flattened_mut().chunks_exact_mut(state_size)
+        // SAFETY: the caller upholds the contract of `state_flattened_mut`.
+        unsafe { self.state_flattened_mut() }.chunks_exact_mut(state_size)
     }
 
     /// Returns a slice of the state belonging to simulation `index`-th instance.
@@ -165,9 +182,15 @@ impl MjBatch {
     }
 
     /// Same as [`MjBatch::state_at`] but returning as mutable data.
-    pub fn state_at_mut(&mut self, index: usize) -> &mut [MjtNum] {
+    ///
+    /// # Safety
+    /// Every history cursor in the state rows must stay an integer in `0..nsample` of its
+    /// buffer.
+    pub unsafe fn state_at_mut(&mut self, index: usize) -> &mut [MjtNum] {
         let state_size = self.state_size();
-        &mut self.state_flattened_mut()[index * state_size..][..state_size]
+        // SAFETY: the caller upholds the contract of `state_flattened_mut`.
+        let states = unsafe { self.state_flattened_mut() };
+        &mut states[index * state_size..][..state_size]
     }
 
     /// Advance each selected simulation by `num_step` calls.
@@ -241,6 +264,40 @@ impl MjBatch {
             stage as i32
         ) as u32 }
     }
+
+    /// Copies the state of `index`-th simulation into `data`. In a [persistent](MjBatch::persistent)
+    /// batch, copies the whole [`MjData`] instead.
+    /// Wraps [`mjb_getData`](crate::mujoco_c::mjb_getData).
+    ///
+    /// # Errors
+    /// - [`MjBatchError::IndexOutOfBounds`] if `index` is not less than
+    ///   [`num_sim`](MjBatch::num_sim).
+    /// - [`MjBatchError::IncompatibleModel`] if `data` was created from a model that is not
+    ///   compatible with the batch's model.
+    pub fn get_data<M: ModelType + Send>(&self, index: usize, data: &mut MjData<M>) -> Result<(), MjBatchError>  {
+        if index >= self.num_sim {
+            return Err(MjBatchError::IndexOutOfBounds { id: index, len: self.num_sim });
+        }
+
+        // Check the model layout. Checks do exist inside the batching API, however,
+        // they are not adequate fot actual safety.
+        if self.layout != *data.model().layout() {
+            return Err(MjBatchError::IncompatibleModel {
+                source: Arc::clone(&self.layout),
+                destination: Arc::clone(data.model().layout()),
+            });
+        }
+
+        // SAFETY: handle is always valid while MjBatch is alive, index can be cast to i32 since we already checked it
+        //         at construction, `data` is guaranteed to be valid while MjData is alive. The &self borrow is safe
+        //         despite mjb_getData requiring a *mut MjBatch because it doesn't do any modifications.
+        unsafe {
+            mjb_getData(self.handle.as_ptr(), index as i32, data.ffi_mut());
+        }
+
+        Ok(())
+    }
+
 }
 
 impl Drop for MjBatch {
@@ -250,3 +307,12 @@ impl Drop for MjBatch {
         unsafe { mjb_deleteBatch(self.handle.as_ptr()); }
     }
 }
+
+// SAFETY: Safe to implement due to the batch handle being wrapped in our owned Rust struct, which prevents aliasing
+//         and data races and races.
+unsafe impl Send for MjBatch {}
+
+// SAFETY: Safe to implement due to batch having its own internal mutexes. In any case, the borrow checker prevents
+//         multiple &mut references (and any simultaneous &mut and & references) and thus is safe even without that
+//         internal mutex.
+unsafe impl Sync for MjBatch {}
