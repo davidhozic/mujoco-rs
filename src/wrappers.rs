@@ -10,6 +10,7 @@ pub mod mj_option;
 pub mod mj_plugin;
 pub mod mj_cache;
 pub mod mj_model;
+pub mod mj_batch;
 pub mod mj_data;
 
 pub mod fun;
@@ -25,4 +26,5 @@ pub use mj_plugin::*;
 pub use mj_option::*;
 pub use mj_cache::*;
 pub use mj_model::*;
+pub use mj_batch::*;
 pub use mj_data::*;

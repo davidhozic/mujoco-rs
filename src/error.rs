@@ -7,6 +7,7 @@
 //! - [`MjModelError`] - model loading, saving, and state operations (`MjModel`).
 //! - [`MjVfsError`] - virtual file system operations (`MjVfs`).
 //! - [`MjPluginError`] - plugin library loading operations.
+//! - [`MjBatchError`] - batched simulation operations (`MjBatch`).
 //! - [`GlInitError`] - OpenGL / window initialization (feature-gated).
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -553,6 +554,49 @@ impl fmt::Display for MjPluginError {
 }
 
 impl std::error::Error for MjPluginError {}
+
+/// Errors that can occur in batched simulation ([`MjBatch`](crate::wrappers::MjBatch)) operations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum MjBatchError {
+    /// MuJoCo failed to create the batch. Carries MuJoCo's error message.
+    MakeFailed(String),
+    /// One or more simulations raised a MuJoCo error during the call.
+    ///
+    /// The failed simulations are reset; the others completed the call.
+    SimulationsFailed {
+        /// Index of each failed simulation, with its error message.
+        failures: Vec<(usize, String)>,
+    },
+    /// The named field does not exist or is not available for this operation.
+    InvalidField(String),
+    /// A simulation or keyframe index is out of the valid range.
+    IndexOutOfBounds {
+        /// Name of the index parameter, e.g. `"sim"` or `"key"`.
+        kind: &'static str,
+        /// The index value that was passed.
+        id: usize,
+        /// Exclusive upper bound of the valid range.
+        upper: usize,
+    },
+}
+
+impl fmt::Display for MjBatchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MakeFailed(msg) => write!(f, "batch creation failed: {msg}"),
+            Self::SimulationsFailed { failures } => {
+                write!(f, "{} simulation(s) failed", failures.len())
+            }
+            Self::InvalidField(name) => write!(f, "invalid batch field '{name}'"),
+            Self::IndexOutOfBounds { kind, id, upper } => {
+                write!(f, "{kind} {id} is out of bounds [0, {upper})")
+            }
+        }
+    }
+}
+
+impl std::error::Error for MjBatchError {}
 
 /// Errors that can occur during OpenGL / window initialization.
 ///

@@ -4,6 +4,7 @@ pub use crate::error::{
     MjPluginError,
     MjModelError,
     MjSceneError,
+    MjBatchError,
     MjEditError,
     MjDataError,
     MjVfsError,
