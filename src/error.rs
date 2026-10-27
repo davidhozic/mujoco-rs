@@ -561,13 +561,6 @@ impl std::error::Error for MjPluginError {}
 pub enum MjBatchError {
     /// MuJoCo failed to create the batch. Carries MuJoCo's error message.
     MakeFailed(String),
-    /// A simulation index is out of the valid range.
-    IndexOutOfBounds {
-        /// The index that was supplied.
-        id: usize,
-        /// Exclusive upper bound of the valid range.
-        len: usize,
-    },
     /// The data was created from a model that is not compatible with the batch's model.
     IncompatibleModel {
         /// Layout of the batch's model.
@@ -581,9 +574,6 @@ impl fmt::Display for MjBatchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::MakeFailed(msg) => write!(f, "batch creation failed: {msg}"),
-            Self::IndexOutOfBounds { id, len } => {
-                write!(f, "simulation index {id} is out of range [0, {len})")
-            }
             Self::IncompatibleModel { .. } => write!(f, "incompatible model"),
         }
     }

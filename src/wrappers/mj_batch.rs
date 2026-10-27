@@ -308,14 +308,13 @@ impl MjBatch {
     /// Wraps [`mjb_getData`](crate::mujoco_c::mjb_getData).
     ///
     /// # Errors
-    /// - [`MjBatchError::IndexOutOfBounds`] if `index` is not less than
-    ///   [`num_sim`](MjBatch::num_sim).
-    /// - [`MjBatchError::IncompatibleModel`] if `data` was created from a model that is not
-    ///   compatible with the batch's model.
+    /// Returns [`MjBatchError::IncompatibleModel`] if `data` was created from a model that is not
+    /// compatible with the batch's model.
+    ///
+    /// # Panics
+    /// Panics if `index` is not less than [`num_sim`](MjBatch::num_sim).
     pub fn get_data<M: ModelType>(&self, index: usize, data: &mut MjData<M>) -> Result<(), MjBatchError> {
-        if index >= self.num_sim {
-            return Err(MjBatchError::IndexOutOfBounds { id: index, len: self.num_sim });
-        }
+        assert!(index < self.num_sim, "simulation index {index} is out of range [0, {})", self.num_sim);
 
         // C only compares the total buffer sizes, which a model with a different layout can match.
         if self.layout != *data.model().layout() {
