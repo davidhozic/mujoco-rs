@@ -249,28 +249,31 @@ impl MjBatch {
     /// Wraps [`mjb_rollout`].
     ///
     /// # Parameters
-    /// - `ids`: the selected simulations.
+    /// - `maybe_ids`: the selected simulations. Giving [`None`] selects all simulations.
     /// - `num_steps`: the number of steps of each selected simulation.
     /// - `states_and_mask`: the states set before each step and their
     ///   [`MjtState`](crate::wrappers::mj_data::MjtState) mask. The slice is a flattened
-    ///   `ids.len()` x `num_steps` x [`model.state_size(mask)`](MjModel::state_size) array.
+    ///   `num_ids` x `num_steps` x [`model.state_size(mask)`](MjModel::state_size) array.
     ///   Giving `None` sets no state.
     /// - `records_and_mask`: the buffers into which the state after each step is written and their
     ///   [`MjtState`](crate::wrappers::mj_data::MjtState) masks. Each buffer is a flattened
-    ///   `ids.len()` x `num_steps` x [`model.state_size(mask)`](MjModel::state_size) array.
+    ///   `num_ids` x `num_steps` x [`model.state_size(mask)`](MjModel::state_size) array.
+    ///
+    /// `num_ids` is the length of the slice in `maybe_ids`, or [`num_sim`](MjBatch::num_sim) for
+    /// [`None`].
     ///
     /// # Returns
     /// Number of simulations in which MuJoCo raised an error.
     ///
     /// # Note
-    /// MuJoCo reports an error and stops the process if `ids` is not sorted and unique, if it
-    /// holds an id not less than [`num_sim`](MjBatch::num_sim), or if `num_steps` is 0.
+    /// MuJoCo reports an error and stops the process if `ids` inside `maybe_ids` is not sorted and
+    /// unique, if it holds an id not less than [`num_sim`](MjBatch::num_sim), or if `num_steps` is 0.
     ///
     /// # Panics
     /// Panics if `ids.len()`, `num_steps` or `records_and_mask.len()` exceeds [`i32::MAX`], if a
     /// mask is not below `1 << mjNSTATE`, if the `states_and_mask` mask is not a subset of
     /// [`MjtState::mjSTATE_USER`](crate::wrappers::mj_data::MjtState::mjSTATE_USER), or if a buffer
-    /// length is not `ids.len() * num_steps * state_size`.
+    /// length is not `num_ids * num_steps * state_size`.
     ///
     /// # Example
     /// ```
@@ -310,19 +313,20 @@ impl MjBatch {
     /// // One `qpos` value per simulation and step.
     /// let mut qpos = [0.0; 2 * 2];
     /// let failed = batch.rollout(
-    ///     &[0, 1], 2,
+    ///     Some(&[0, 1]), 2,
     ///     Some((states, mask)), &mut [(&mut qpos, MjtState::mjSTATE_QPOS as u32)]
     /// );
     /// assert_eq!(failed, 0);
     /// ```
     pub fn rollout(
-        &mut self, ids: &[u32], num_steps: u32,
+        &mut self, maybe_ids: Option<&[u32]>, num_steps: u32,
         states_and_mask: Option<(&[MjtNum], u32)>, records_and_mask: &mut [(&mut [MjtNum], u32)]
     ) -> u32
     {
         // SAFETY: handle is always valid here.
         let model = unsafe { mjb_model(self.handle.as_ptr()) };
-        let num_sims_times_steps = ids.len().strict_mul(num_steps as usize);
+        let num_ids = maybe_ids.map_or(self.num_sim, |x| x.len());
+        let num_sims_times_steps = num_ids.strict_mul(num_steps as usize);
         // C reads and writes the buffers without a length check.
         let assert_len = |mask: u32, len: usize| {
             assert!(mask < (1 << mjNSTATE as u32), "state mask {mask:#x} has an unknown bit");
@@ -352,8 +356,8 @@ impl MjBatch {
         //         length, u32 has the same layout as i32, every buffer has the length C accesses,
         //         and `records_and_mask` borrows the record buffers mutably for the call.
         unsafe { mjb_rollout(
-            self.handle.as_ptr(), ids.as_ptr().cast(),
-            checked_c_len(ids.len()), checked_c_len(num_steps),
+            self.handle.as_ptr(), maybe_ids.map_or(ptr::null(), |ids| ids.as_ptr().cast()),
+            maybe_ids.map_or(0, |ids| checked_c_len(ids.len())), checked_c_len(num_steps),
             states_and_mask.map_or(ptr::null(), |(states, _)| states.as_ptr()),
             states_and_mask.map_or(0, |(_, mask)| mask as i32),
             c_records.as_ptr(), checked_c_len(c_records.len())
@@ -390,7 +394,9 @@ impl MjBatch {
         Ok(())
     }
 
-    /// Advance each selected simulation by `num_steps` calls.
+    /// Advance each selected simulation by `num_steps` calls. To step a particular set of simulation instances,
+    /// give `maybe_ids` [`Some`] with a slice of simulation instance indices to step, otherwise pass [`None`] to
+    /// step all simulation instances.
     ///
     /// Setting `stage` to [`MjtStage::mjSTAGE_NONE`] makes this method give the same results as
     /// if we would be calling [`MjData::step`](crate::wrappers::mj_data::MjData::step) on each
@@ -405,40 +411,41 @@ impl MjBatch {
     /// Number of simulations in which MuJoCo raised an error.
     ///
     /// # Note
-    /// MuJoCo reports an error and stops the process if `ids` is not sorted and unique, if it
+    /// MuJoCo reports an error and stops the process if `ids` inside `maybe_ids` is not sorted and unique, if it
     /// holds an id not less than [`num_sim`](MjBatch::num_sim), or if `num_steps` is 0.
     ///
     /// # Panics
     /// Panics if `ids.len()` or `num_steps` exceeds [`i32::MAX`].
-    pub fn step(&mut self, ids: &[u32], num_steps: u32, stage: MjtStage) -> u32 {
+    pub fn step(&mut self, maybe_ids: Option<&[u32]>, num_steps: u32, stage: MjtStage) -> u32 {
         // SAFETY: handle is always valid here, ids and num_steps have checked length, u32 has
         //         the same layout as i32, casting stage to i32 can't overflow.
         unsafe { mjb_step(
-            self.handle.as_ptr(), ids.as_ptr().cast(),
-            checked_c_len(ids.len()), checked_c_len(num_steps),
+            self.handle.as_ptr(), maybe_ids.map_or(ptr::null(), |ids| ids.as_ptr().cast()),
+            maybe_ids.map_or(0, |ids| checked_c_len(ids.len())),
+            checked_c_len(num_steps),
             stage as i32
         ) as u32 }
     }
 
     /// Compute [`MjData::forward`](crate::wrappers::mj_data::MjData::forward) with all stages up to
-    /// `stage` on each selected simulation.
+    /// `stage` on each selected simulation. Giving `maybe_ids` [`None`] selects all simulations.
     /// Wraps [`mjb_forward`].
     ///
     /// # Returns
     /// Number of simulations in which MuJoCo raised an error.
     ///
     /// # Note
-    /// MuJoCo reports an error and stops the process if `ids` is not sorted and unique, or if it
-    /// holds an id not less than [`num_sim`](MjBatch::num_sim).
+    /// MuJoCo reports an error and stops the process if `ids` inside `maybe_ids` is not sorted and
+    /// unique, or if it holds an id not less than [`num_sim`](MjBatch::num_sim).
     ///
     /// # Panics
     /// Panics if `ids.len()` exceeds [`i32::MAX`].
-    pub fn forward(&mut self, ids: &[u32], stage: MjtStage) -> u32 {
+    pub fn forward(&mut self, maybe_ids: Option<&[u32]>, stage: MjtStage) -> u32 {
         // SAFETY: handle is always valid here, ids have checked length, u32 has the same layout
         //         as i32, casting stage to i32 can't overflow.
         unsafe { mjb_forward(
-            self.handle.as_ptr(), ids.as_ptr().cast(),
-            checked_c_len(ids.len()),
+            self.handle.as_ptr(), maybe_ids.map_or(ptr::null(), |ids| ids.as_ptr().cast()),
+            maybe_ids.map_or(0, |ids| checked_c_len(ids.len())),
             stage as i32
         ) as u32 }
     }
@@ -446,32 +453,34 @@ impl MjBatch {
     /// Reset each selected simulation back to a specific keyframe, then compute
     /// [`MjData::forward`](crate::wrappers::mj_data::MjData::forward) with all stages up to `stage`.
     ///
-    /// `keys` holds one keyframe index per element of `ids`. Giving [`None`] resets to the model
-    /// defaults.
+    /// Giving `maybe_ids` [`None`] selects all simulations. `keys` holds one keyframe index per
+    /// selected simulation. Giving [`None`] resets to the model defaults.
     /// Wraps [`mjb_reset`].
     ///
     /// # Returns
     /// Number of simulations in which MuJoCo raised an error.
     ///
     /// # Note
-    /// MuJoCo reports an error and stops the process if `ids` is not sorted and unique, if it
-    /// holds an id not less than [`num_sim`](MjBatch::num_sim), or if a key is not a keyframe
-    /// index of the model.
+    /// MuJoCo reports an error and stops the process if `ids` inside `maybe_ids` is not sorted and
+    /// unique, if it holds an id not less than [`num_sim`](MjBatch::num_sim), or if a key is not a
+    /// keyframe index of the model.
     ///
     /// # Panics
     /// - Panics if `ids.len()` exceeds [`i32::MAX`].
-    /// - Panics if `keys` is `Some` and its length differs from `ids.len()`.
-    pub fn reset(&mut self, ids: &[u32], keys: Option<&[u32]>, stage: MjtStage) -> u32 {
-        // MuJoCo reads one key per id before it checks the keys.
+    /// - Panics if `keys` is `Some` and its length differs from the number of selected
+    ///   simulations.
+    pub fn reset(&mut self, maybe_ids: Option<&[u32]>, keys: Option<&[u32]>, stage: MjtStage) -> u32 {
+        // MuJoCo reads one key per selected simulation before it checks the keys.
         if let Some(keys) = keys {
-            assert_eq!(keys.len(), ids.len(), "keys must have one element per id");
+            let num_ids = maybe_ids.map_or(self.num_sim, |x| x.len());
+            assert_eq!(keys.len(), num_ids, "keys must have one element per selected simulation");
         }
 
         // SAFETY: handle is always valid here, ids and keys have checked length, u32 has the
         //         same layout as i32, casting stage to i32 can't overflow.
         unsafe { mjb_reset(
-            self.handle.as_ptr(), ids.as_ptr().cast(),
-            checked_c_len(ids.len()),
+            self.handle.as_ptr(), maybe_ids.map_or(ptr::null(), |ids| ids.as_ptr().cast()),
+            maybe_ids.map_or(0, |ids| checked_c_len(ids.len())),
             keys.map_or(ptr::null(), |keys| keys.as_ptr().cast()),
             stage as i32
         ) as u32 }

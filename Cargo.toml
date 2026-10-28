@@ -50,6 +50,10 @@ name = "basic"
 path = "examples/simulation/basic.rs"
 
 [[example]]
+name = "batched"
+path = "examples/simulation/batched.rs"
+
+[[example]]
 name = "model_parameters"
 path = "examples/simulation/model_parameters.rs"
 

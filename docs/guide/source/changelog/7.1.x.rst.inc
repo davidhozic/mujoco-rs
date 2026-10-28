@@ -13,3 +13,7 @@
   :docs-rs:`~mujoco_rs::wrappers::mj_batch::<type>MjBatchConfig` :sup:`new`. The former can be used
   for batching multiple simulation instances across multiple-threads through a unified API.
 
+.. rubric:: New examples
+
+- :gh-example:`Batched simulation <simulation/batched.rs>` --- runs many simulations in parallel
+  using :docs-rs:`~mujoco_rs::wrappers::mj_batch::<struct>MjBatch`.
