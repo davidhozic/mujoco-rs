@@ -1,9 +1,54 @@
-This project is dual licensed. Choose MIT or Apache.
+This project is dual licensed (MIT or Apache), with the additional reservation of rights below.
 
 While most files on this repository (excluding the submodules) are created from scratch,
 the wrapper still relies on raw FFI bindings to MuJoCo.
 
 Any MuJoCo C or C++ code is from https://github.com/google-deepmind/mujoco, which is licensed under the Apache license.
+
+--------------------------------------------------------------------------------------------
+RESERVATION OF RIGHTS: TEXT AND DATA MINING AND MACHINE LEARNING
+
+In this section, "Software" means the source code, documentation, comments, examples, assets
+and version history in this repository, and any part of them. The "copyright holder" is
+David Hožič.
+
+The terms in this section apply worldwide, to the full extent that the applicable law permits.
+The terms apply in addition to the license that you choose below (MIT or Apache). If this
+section and that license do not agree, the conditions in this reservation take precedence over
+the license.
+
+1. Neither license below, nor any other grant, gives permission to use the Software, in whole
+   or in part, for any of these purposes:
+   a) text and data mining, which is any automated analysis of the Software to generate
+      information such as patterns, trends or correlations;
+   b) training, fine-tuning, validation or evaluation of any machine learning model or
+      artificial intelligence system, including large language models and code generation
+      models;
+   c) the creation, compilation or distribution of datasets for the purposes in a) or b).
+
+2. The copyright holder expressly reserves all rights for the uses in point 1. This reservation
+   includes the reservation under Article 4(3) of Directive (EU) 2019/790, and the equivalent
+   reservation, opt-out or refusal of consent under any other law.
+
+3. Point 1 does not restrict normal use of the Software. You can read, compile, run, modify,
+   distribute and use the Software as a dependency under the license that you choose. You can
+   also use automated development tools on the Software (for example compilers, linters, static
+   analyzers, security scanners and dependency managers), if these tools do not use the
+   Software for a purpose in point 1 b) or c). Search engines can index the Software only to
+   make it discoverable.
+
+4. This section applies to all work that the copyright holder owns, and to all contributions
+   under point 5. It does not apply to MuJoCo or to other third-party code, which keep their
+   own licenses.
+
+5. If you submit a contribution to this repository, you license your contribution under the
+   same terms as the Software, including this section.
+
+6. If you distribute the Software, you must keep this reservation section together with the
+   license of your choice.
+
+7. If a court or other authority finds a part of this section invalid or unenforceable, that
+   part applies to the maximum extent that the law permits. All other parts stay in force.
 
 --------------------------------------------------------------------------------------------
 MIT License

@@ -2,7 +2,7 @@
 name         = "mujoco-rs-derive"
 version      = "0.1.0"
 edition      = "2024"
-license.workspace      = true
+license-file.workspace = true
 repository.workspace   = true
 rust-version.workspace = true
 description  = "Internal procedural macros for the mujoco-rs crate. Not for direct use."
