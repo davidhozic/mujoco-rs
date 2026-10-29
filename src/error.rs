@@ -7,7 +7,7 @@
 //! - [`MjModelError`] - model loading, saving, and state operations (`MjModel`).
 //! - [`MjVfsError`] - virtual file system operations (`MjVfs`).
 //! - [`MjPluginError`] - plugin library loading operations.
-//! - [`MjBatchError`] - batched simulation operations (`MjBatch`).
+//! - [`MjBatchError`] - batched simulation operations ([`MjBatch`](crate::wrappers::MjBatch)).
 //! - [`GlInitError`] - OpenGL / window initialization (feature-gated).
 use std::path::PathBuf;
 use std::sync::Arc;

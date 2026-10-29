@@ -46,8 +46,7 @@ use crate::mujoco_c::{
 };
 use crate::wrappers::mj_model::{MjModel, MjModelLayout, MjtStage};
 use crate::util::{ERROR_BUF_LEN, checked_c_len, string_from_c};
-use crate::mujoco_c::mjtState::{mjNSTATE, mjSTATE_USER};
-use crate::wrappers::{MjData, MjWarningStat};
+use crate::wrappers::{MjData, MjWarningStat, MjtState};
 use crate::mujoco_c::mjtWarning::mjNWARNING;
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::traits::ModelType;
@@ -69,6 +68,45 @@ impl Default for MjBatchConfig {
     }
 }
 
+/// A field or state recorded by [`MjBatch::rollout`] after every step.
+/// This is a wrapper to the FFI type [`mjBatchRecord`]. Its only purpose on top of
+/// [`mjBatchRecord`] is to track the batch buffer and its lifetime.
+pub struct MjBatchRecord<'b> {
+    inner: mjBatchRecord,
+    buffer: &'b mut [MjtNum]
+}
+
+impl<'b> MjBatchRecord<'b> {
+    /// Creates a new [`MjBatchRecord`] instance, registering the `buffer` as the record output
+    /// buffer and `spec` as the bitmask ([`MjtState`]) of what information to include in the state
+    /// of the `buffer`.
+    ///
+    /// # Panics
+    /// A panic is triggered when `spec` is not a valid bitmask of [`MjtState`]
+    /// (i.e., less than (1 << [`MjtState::mjNSTATE`])).
+    pub fn new(buffer: &'b mut [MjtNum], spec: u32) -> Self {
+        // MuJoCo stops the process for a mask with an unknown bit.
+        assert!(spec < (1 << MjtState::mjNSTATE as u32), "state spec/mask {spec:#x} has an unknown bit");
+        Self { inner: mjBatchRecord {
+            field: ptr::null(), spec: spec as i32, buf: buffer.as_mut_ptr().cast()
+        }, buffer }
+    }
+
+    /// Returns a reference to the FFI type [`mjBatchRecord`].
+    pub fn ffi(&self) -> &mjBatchRecord { &self.inner }
+    /// Returns a mutable reference to the FFI type [`mjBatchRecord`].
+    pub fn ffi_mut(&mut self) -> &mut mjBatchRecord { &mut self.inner }
+}
+
+impl fmt::Debug for MjBatchRecord<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MjBatchRecord")
+            .field("spec", &self.inner.spec)
+            .field("len", &self.buffer.len())
+            .finish_non_exhaustive()
+    }
+}
+
 /// Wrapper around the [`mjBatch`] FFI handle.
 /// The handle is an opaque struct to many simulation instances of one model and thread-pool.
 pub struct MjBatch {
@@ -79,7 +117,7 @@ pub struct MjBatch {
 
 impl MjBatch {
     /// Attempt to make a batched simulation, of `num_sim` instances, out of
-    /// [`MjModel`](crate::wrappers::MjModel) represented by `model`.
+    /// [`MjModel`] represented by `model`.
     /// `config` represents the threading configuration (see [`MjBatchConfig`]).
     ///
     /// Wraps [`mjb_makeBatch`].
@@ -123,7 +161,7 @@ impl MjBatch {
         unsafe { mjb_nthread(self.handle.as_ptr()) as usize }
     }
 
-    /// Returns `true` if the batch keeps one [`MjData`](crate::wrappers::mj_data::MjData) per
+    /// Returns `true` if the batch keeps one [`MjData`] per
     /// simulation instance, `false` if it keeps one per thread.
     /// Wraps [`mjb_persistent`].
     pub fn persistent(&self) -> bool {
@@ -252,11 +290,11 @@ impl MjBatch {
     /// - `maybe_ids`: the selected simulations. Giving [`None`] selects all simulations.
     /// - `num_steps`: the number of steps of each selected simulation.
     /// - `states_and_mask`: the states set before each step and their
-    ///   [`MjtState`](crate::wrappers::mj_data::MjtState) mask. The slice is a flattened
+    ///   [`MjtState`] mask. The slice is a flattened
     ///   `num_ids` x `num_steps` x [`model.state_size(mask)`](MjModel::state_size) array.
     ///   Giving `None` sets no state.
-    /// - `records_and_mask`: the buffers into which the state after each step is written and their
-    ///   [`MjtState`](crate::wrappers::mj_data::MjtState) masks. Each buffer is a flattened
+    /// - `batch_records`: the buffers into which the state after each step is written and their
+    ///   [`MjtState`] masks. Each buffer is a flattened
     ///   `num_ids` x `num_steps` x [`model.state_size(mask)`](MjModel::state_size) array.
     ///
     /// `num_ids` is the length of the slice in `maybe_ids`, or [`num_sim`](MjBatch::num_sim) for
@@ -270,15 +308,14 @@ impl MjBatch {
     /// unique, if it holds an id not less than [`num_sim`](MjBatch::num_sim), or if `num_steps` is 0.
     ///
     /// # Panics
-    /// Panics if `ids.len()`, `num_steps` or `records_and_mask.len()` exceeds [`i32::MAX`], if a
-    /// mask is not below `1 << mjNSTATE`, if the `states_and_mask` mask is not a subset of
-    /// [`MjtState::mjSTATE_USER`](crate::wrappers::mj_data::MjtState::mjSTATE_USER), or if a buffer
+    /// Panics if `ids.len()`, `num_steps` or `batch_records.len()` exceeds [`i32::MAX`], if the
+    /// `states_and_mask` mask is not a subset of [`MjtState::mjSTATE_USER`], or if a buffer
     /// length is not `num_ids * num_steps * state_size`.
     ///
     /// # Example
     /// ```
     /// use mujoco_rs::wrappers::mj_primitive::MjtNum;
-    /// use mujoco_rs::wrappers::mj_batch::MjBatch;
+    /// use mujoco_rs::wrappers::mj_batch::{MjBatch, MjBatchRecord};
     /// use mujoco_rs::wrappers::mj_data::MjtState;
     /// use mujoco_rs::prelude::*;
     ///
@@ -314,13 +351,13 @@ impl MjBatch {
     /// let mut qpos = [0.0; 2 * 2];
     /// let failed = batch.rollout(
     ///     Some(&[0, 1]), 2,
-    ///     Some((states, mask)), &mut [(&mut qpos, MjtState::mjSTATE_QPOS as u32)]
+    ///     Some((states, mask)), &[MjBatchRecord::new(&mut qpos, MjtState::mjSTATE_QPOS as u32)]
     /// );
     /// assert_eq!(failed, 0);
     /// ```
     pub fn rollout(
         &mut self, maybe_ids: Option<&[u32]>, num_steps: u32,
-        states_and_mask: Option<(&[MjtNum], u32)>, records_and_mask: &mut [(&mut [MjtNum], u32)]
+        states_and_mask: Option<(&[MjtNum], u32)>, batch_records: &[MjBatchRecord<'_>]
     ) -> u32
     {
         // SAFETY: handle is always valid here.
@@ -329,7 +366,6 @@ impl MjBatch {
         let num_sims_times_steps = num_ids.strict_mul(num_steps as usize);
         // C reads and writes the buffers without a length check.
         let assert_len = |mask: u32, len: usize| {
-            assert!(mask < (1 << mjNSTATE as u32), "state mask {mask:#x} has an unknown bit");
             // SAFETY: the batch's model is valid while this MjBatch exists, `mask` is valid.
             let state_size = unsafe { mj_stateSize(model, mask as i32) } as usize;
             assert_eq!(
@@ -341,20 +377,20 @@ impl MjBatch {
         if let Some((states, mask)) = states_and_mask {
             // MuJoCo stops the process for a mask outside mjSTATE_USER.
             assert!(
-                mask & !(mjSTATE_USER as u32) == 0,
+                mask & !(MjtState::mjSTATE_USER as u32) == 0,
                 "state mask {mask:#x} is not a subset of mjSTATE_USER"
             );
             assert_len(mask, states.len());
         }
 
-        let c_records: Vec<_> = records_and_mask.iter_mut().map(|(buffer, mask)| {
-            assert_len(*mask, buffer.len());
-            mjBatchRecord { field: ptr::null(), spec: *mask as i32, buf: buffer.as_mut_ptr().cast() }
+        let c_records: Vec<_> = batch_records.iter().map(|batch_record| {
+            assert_len(batch_record.inner.spec as u32, batch_record.buffer.len());
+            batch_record.inner.clone()
         }).collect();
 
-        // SAFETY: handle is always valid here, ids, num_steps and records_and_mask have checked
+        // SAFETY: handle is always valid here, ids, num_steps and batch_records have checked
         //         length, u32 has the same layout as i32, every buffer has the length C accesses,
-        //         and `records_and_mask` borrows the record buffers mutably for the call.
+        //         and each record borrows its buffer mutably for the call.
         unsafe { mjb_rollout(
             self.handle.as_ptr(), maybe_ids.map_or(ptr::null(), |ids| ids.as_ptr().cast()),
             maybe_ids.map_or(0, |ids| checked_c_len(ids.len())), checked_c_len(num_steps),
@@ -400,7 +436,7 @@ impl MjBatch {
     ///
     /// Setting `stage` to [`MjtStage::mjSTAGE_NONE`] makes this method give the same results as
     /// if we would be calling [`MjData::step`](crate::wrappers::mj_data::MjData::step) on each
-    /// [`MjData`](crate::wrappers::mj_data::MjData) instance separately. This means the derived
+    /// [`MjData`] instance separately. This means the derived
     /// fields of state will lag behind one time-step. Setting `stage` to any other value than
     /// [`MjtStage::mjSTAGE_NONE`], will cause the batching API to compute
     /// [`MjData::forward`](crate::wrappers::mj_data::MjData::forward) with all stages up to
@@ -488,7 +524,7 @@ impl MjBatch {
 
     /// Copies the state of `index`-th simulation into `data`. In a [persistent](MjBatch::persistent)
     /// batch, copies the whole [`MjData`] instead.
-    /// Wraps [`mjb_getData`](crate::mujoco_c::mjb_getData).
+    /// Wraps [`mjb_getData`].
     ///
     /// # Errors
     /// Returns [`MjBatchError::IncompatibleModel`] if `data` was created from a model that is not
