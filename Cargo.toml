@@ -2,7 +2,7 @@
 members = ["mujoco-rs-derive"]
 
 [workspace.package]
-license     = "MIT OR Apache-2.0"
+license-file = "LICENSE"
 repository  = "https://github.com/davidhozic/mujoco-rs"
 rust-version = "1.95"
 
@@ -13,7 +13,7 @@ unnecessary_lazy_evaluations = "allow"
 name = "mujoco-rs"
 version = "7.0.0+mj-3.17.0"
 edition = "2024"
-license.workspace = true
+license-file.workspace = true
 description = "A high-level Rust wrapper around the MuJoCo C library, with a native viewer (re-)written in Rust."
 readme = "README.md"
 repository.workspace = true
