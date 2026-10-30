@@ -12,9 +12,10 @@
 - Added :docs-rs:`~mujoco_rs::wrappers::mj_batch::<struct>MjBatch` :sup:`new` (with its methods) and
   :docs-rs:`~mujoco_rs::wrappers::mj_batch::<type>MjBatchConfig` :sup:`new`. The former can be used
   for batching multiple simulation instances across multiple-threads through a unified API.
-- Added :docs-rs:`~mujoco_rs::wrappers::mj_batch::<struct>MjBatchRecord` :sup:`new`, the output
-  buffer of a state that :docs-rs:`~~mujoco_rs::wrappers::mj_batch::<struct>MjBatch::<method>rollout`
-  records after each step.
+- Added :docs-rs:`~mujoco_rs::wrappers::mj_batch::<struct>MjBatchRecordBuilder` :sup:`new`, the
+  builder of the output buffer of a state that
+  :docs-rs:`~~mujoco_rs::wrappers::mj_batch::<struct>MjBatch::<method>rollout` records after each
+  step.
 
 .. rubric:: New examples
 

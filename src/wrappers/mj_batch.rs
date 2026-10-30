@@ -53,6 +53,7 @@ use crate::mujoco_c::mjtWarning::mjNWARNING;
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::traits::ModelType;
 use crate::error::MjBatchError;
+use crate::builder_setters;
 
 /// The threading configuration of a batch.
 pub type MjBatchConfig = mjBatchConfig;
@@ -72,45 +73,46 @@ impl Default for MjBatchConfig {
 }
 
 /// A field or state recorded by [`MjBatch::rollout`] after every step.
-/// This is a wrapper to the FFI type [`mjBatchRecord`]. Its only purpose on top of
-/// [`mjBatchRecord`] is to track the batch buffer and its lifetime.
-pub struct MjBatchRecord<'b> {
-    inner: mjBatchRecord,
-    buffer: &'b mut [MjtNum]
+/// This is a struct used to create [`mjBatchRecord`] inside [`MjBatch::rollout`].
+/// It is NOT a wrapper around [`mjBatchRecord`].
+pub struct MjBatchRecordBuilder<'b> {
+    buffer: &'b mut [MjtNum],
+    spec: u32
 }
 
-impl<'b> MjBatchRecord<'b> {
-    /// Creates a new [`MjBatchRecord`] instance, registering the `buffer` as the record output
-    /// buffer and `spec` as the bitmask ([`MjtState`]) of what information to include in the state
-    /// of the `buffer`.
+impl<'b> MjBatchRecordBuilder<'b> {
+    /// Creates a new [`MjBatchRecordBuilder`] instance, registering the `buffer` as the record
+    /// output buffer and `spec` as the bitmask ([`MjtState`]) of what information to include in the
+    /// state of the `buffer`.
     ///
     /// # Panics
     /// A panic is triggered when `spec` is not a valid bitmask of [`MjtState`]
     /// (i.e., less than (1 << [`MjtState::mjNSTATE`])).
     pub fn new(buffer: &'b mut [MjtNum], spec: u32) -> Self {
-        // MuJoCo stops the process for a mask with an unknown bit.
-        assert!(spec < (1 << MjtState::mjNSTATE as u32), "state spec/mask {spec:#x} has an unknown bit");
-        Self { inner: mjBatchRecord {
-            field: ptr::null(), spec: spec as i32, buf: buffer.as_mut_ptr().cast()
-        }, buffer }
+        Self { buffer, spec: 0 }.spec(spec)
     }
 
-    /// Returns a reference to the FFI type [`mjBatchRecord`].
-    pub fn ffi(&self) -> &mjBatchRecord { &self.inner }
-    /// Returns a mutable reference to the FFI type [`mjBatchRecord`].
-    ///
-    /// # Safety
-    /// Do not use this mutable reference to replace FFI data, unless attributes
-    /// [`field`](mjBatchRecord::field) (currently always null) and [`buf`](mjBatchRecord::buf) remain equal.
-    pub unsafe fn ffi_mut(&mut self) -> &mut mjBatchRecord { &mut self.inner }
+    builder_setters! {
+        buffer: &'b mut [MjtNum]; "output buffer into which [`MjBatch::rollout`] writes the state after each step.";
+        spec:   u32 {
+            assert!(*spec < (1 << MjtState::mjNSTATE as u32), "state spec/mask {spec:#x} has an unknown bit");
+        };                        "bitmask ([`MjtState`]) of the state that the buffer holds.\n\n# Panics\nPanics if `value` is not less than (1 << [`MjtState::mjNSTATE`]).";
+    }
 }
 
-impl fmt::Debug for MjBatchRecord<'_> {
+impl fmt::Debug for MjBatchRecordBuilder<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("MjBatchRecord")
-            .field("spec", &self.inner.spec)
+        f.debug_struct("MjBatchRecordBuilder")
+            .field("spec", &self.spec)
             .field("len", &self.buffer.len())
             .finish_non_exhaustive()
+    }
+}
+
+impl From<MjBatchRecordBuilder<'_>> for mjBatchRecord {
+    /// Converts into the FFI type [`mjBatchRecord`], whose `buf` points into the buffer.
+    fn from(record: MjBatchRecordBuilder<'_>) -> Self {
+        Self { field: ptr::null(), spec: record.spec as i32, buf: record.buffer.as_mut_ptr().cast() }
     }
 }
 
@@ -326,7 +328,7 @@ impl MjBatch {
     /// # Example
     /// ```
     /// use mujoco_rs::wrappers::mj_primitive::MjtNum;
-    /// use mujoco_rs::wrappers::mj_batch::{MjBatch, MjBatchRecord};
+    /// use mujoco_rs::wrappers::mj_batch::{MjBatch, MjBatchRecordBuilder};
     /// use mujoco_rs::wrappers::mj_data::MjtState;
     /// use mujoco_rs::prelude::*;
     ///
@@ -362,13 +364,13 @@ impl MjBatch {
     /// let mut qpos = [0.0; 2 * 2];
     /// let failed = batch.rollout(
     ///     Some(&[0, 1]), 2,
-    ///     Some((states, mask)), &[MjBatchRecord::new(&mut qpos, MjtState::mjSTATE_QPOS as u32)]
+    ///     Some((states, mask)), [MjBatchRecordBuilder::new(&mut qpos, MjtState::mjSTATE_QPOS as u32)]
     /// );
     /// assert_eq!(failed, 0);
     /// ```
-    pub fn rollout(
+    pub fn rollout<const N: usize>(
         &mut self, maybe_ids: Option<&[u32]>, num_steps: u32,
-        states_and_mask: Option<(&[MjtNum], u32)>, batch_records: &[MjBatchRecord<'_>]
+        states_and_mask: Option<(&[MjtNum], u32)>, batch_records: [MjBatchRecordBuilder<'_>; N]
     ) -> u32
     {
         // SAFETY: handle is always valid here.
@@ -394,10 +396,11 @@ impl MjBatch {
             assert_len(mask, states.len());
         }
 
-        let c_records: Vec<_> = batch_records.iter().map(|batch_record| {
-            assert_len(batch_record.inner.spec as u32, batch_record.buffer.len());
-            batch_record.inner.clone()
-        }).collect();
+        // Take `buf` from the borrow, so that C writes through a pointer of the live borrow.
+        let c_records = batch_records.map(|batch_record| {
+            assert_len(batch_record.spec, batch_record.buffer.len());
+            mjBatchRecord::from(batch_record)
+        });
 
         // SAFETY: handle is always valid here, ids, num_steps and batch_records have checked
         //         length, u32 has the same layout as i32, every buffer has the length C accesses,
@@ -420,7 +423,7 @@ impl MjBatch {
     ///
     /// # Panics
     /// Panics if `index` is not less than [`num_sim`](MjBatch::num_sim).
-    pub fn get_model(&self, index: usize, model: &mut MjModel) -> Result<(), MjBatchError> {
+    pub fn copy_model_into(&self, index: usize, model: &mut MjModel) -> Result<(), MjBatchError> {
         assert!(index < self.num_sim, "simulation index {index} is out of range [0, {})", self.num_sim);
 
         // SAFETY: the batch's model is valid while this MjBatch exists.
@@ -506,7 +509,8 @@ impl MjBatch {
     /// [`MjData::forward`](crate::wrappers::mj_data::MjData::forward) with all stages up to `stage`.
     ///
     /// Giving `maybe_ids` [`None`] selects all simulations. `keys` holds one keyframe index per
-    /// selected simulation. Giving [`None`] resets to the model defaults.
+    /// selected simulation, where -1 resets that simulation to the model defaults. Giving [`None`]
+    /// resets to the model defaults.
     /// Wraps [`mjb_reset`].
     ///
     /// # Returns
@@ -514,14 +518,14 @@ impl MjBatch {
     ///
     /// # Note
     /// MuJoCo reports an error and stops the process if `ids` inside `maybe_ids` is not sorted and
-    /// unique, if it holds an id not less than [`num_sim`](MjBatch::num_sim), or if a key is not a
-    /// keyframe index of the model.
+    /// unique, if it holds an id not less than [`num_sim`](MjBatch::num_sim), or if a key is not -1
+    /// or a keyframe index of the model.
     ///
     /// # Panics
     /// - Panics if `ids.len()` exceeds [`i32::MAX`].
     /// - Panics if `keys` is `Some` and its length differs from the number of selected
     ///   simulations.
-    pub fn reset(&mut self, maybe_ids: Option<&[u32]>, keys: Option<&[u32]>, stage: MjtStage) -> u32 {
+    pub fn reset(&mut self, maybe_ids: Option<&[u32]>, keys: Option<&[i32]>, stage: MjtStage) -> u32 {
         // MuJoCo reads one key per selected simulation before it checks the keys.
         if let Some(keys) = keys {
             let num_ids = maybe_ids.map_or(self.num_sim, |x| x.len());
@@ -533,7 +537,7 @@ impl MjBatch {
         unsafe { mjb_reset(
             self.handle.as_ptr(), maybe_ids.map_or(ptr::null(), |ids| ids.as_ptr().cast()),
             maybe_ids.map_or(0, |ids| checked_c_len(ids.len())),
-            keys.map_or(ptr::null(), |keys| keys.as_ptr().cast()),
+            keys.map_or(ptr::null(), <[i32]>::as_ptr),
             stage as i32
         ) as u32 }
     }
@@ -548,7 +552,7 @@ impl MjBatch {
     ///
     /// # Panics
     /// Panics if `index` is not less than [`num_sim`](MjBatch::num_sim).
-    pub fn get_data<M: ModelType>(&self, index: usize, data: &mut MjData<M>) -> Result<(), MjBatchError> {
+    pub fn copy_data_into<M: ModelType>(&self, index: usize, data: &mut MjData<M>) -> Result<(), MjBatchError> {
         assert!(index < self.num_sim, "simulation index {index} is out of range [0, {})", self.num_sim);
 
         // C only compares the total buffer sizes, which a model with a different layout can match.
@@ -626,7 +630,7 @@ impl MjBatch {
     }
 
     /// Makes the `name` field of [`MjModel`] be separate for each simulation instance.
-    /// This means that, before each step, the parameter named `name` will be copied from the
+    /// This means that, before each step, the parameter named `name` will be copied from
     /// this method's returned slice into [`MjModel`] instances inside corresponding threads.
     /// The slice is of dimension `num_sim x num_elements(name)`.
     /// Wraps [`mjb_expand`].
@@ -755,5 +759,6 @@ impl Drop for MjBatch {
 //         of a call, and any thread can make calls on the thread pool or delete the batch.
 unsafe impl Send for MjBatch {}
 
-// SAFETY: non-mutable references do not mutate internally. Regardless, an internal mutex is present inside MuJoCo.
+// SAFETY: non-mutable references do not mutate internally. Regardless, an internal mutex is present
+//         inside MuJoCo.
 unsafe impl Sync for MjBatch {}

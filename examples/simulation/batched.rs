@@ -1,7 +1,7 @@
 //! Example of using the wrapper around MuJoCo's batch API.
 use std::num::NonZero;
 
-use mujoco_rs::{prelude::*, wrappers::{MjBatchRecord, MjtNum}};
+use mujoco_rs::{prelude::*, wrappers::{MjBatchRecordBuilder, MjtNum}};
 
 fn main() {
     let model = MjModel::from_xml_string(r#"
@@ -50,7 +50,7 @@ fn main() {
             controls.as_flattened().as_flattened(),
             MjtState::mjSTATE_QFRC_APPLIED as u32
         )),
-        /* batch_records = */ &[MjBatchRecord::new(
+        /* batch_records = */ [MjBatchRecordBuilder::new(
             recorded.as_flattened_mut().as_flattened_mut(),
             MjtState::mjSTATE_QFRC_APPLIED as u32
         )],
