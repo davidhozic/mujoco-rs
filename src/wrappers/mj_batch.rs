@@ -89,14 +89,8 @@ impl<'b> MjBatchRecordBuilder<'b> {
     /// A panic is triggered when `spec` is not a valid bitmask of [`MjtState`]
     /// (i.e., less than (1 << [`MjtState::mjNSTATE`])).
     pub fn new(buffer: &'b mut [MjtNum], spec: u32) -> Self {
-        Self { buffer, spec: 0 }.spec(spec)
-    }
-
-    builder_setters! {
-        buffer: &'b mut [MjtNum]; "output buffer into which [`MjBatch::rollout`] writes the state after each step.";
-        spec:   u32 {
-            assert!(*spec < (1 << MjtState::mjNSTATE as u32), "state spec/mask {spec:#x} has an unknown bit");
-        };                        "bitmask ([`MjtState`]) of the state that the buffer holds.\n\n# Panics\nPanics if `value` is not less than (1 << [`MjtState::mjNSTATE`]).";
+        assert!(spec < (1 << MjtState::mjNSTATE as u32), "state spec/mask {spec:#x} has an unknown bit");
+        Self { buffer, spec: spec }
     }
 }
 
