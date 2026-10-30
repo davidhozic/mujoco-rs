@@ -7,10 +7,11 @@ use std::f64::consts::PI;
 use std::borrow::Cow;
 use std::fmt::Debug;
 
+use egui::{FontId, Id, LayerId, Order, RichText};
 use egui_winit::winit::event::WindowEvent;
 use egui_glow::glow::{self, HasContext};
-use egui::{FontId, RichText, LayerId, Order, Id};
 use egui_winit::winit::window::Window;
+use egui::color_picker::Alpha;
 use egui_winit::egui;
 use egui_winit;
 use log::info;
@@ -19,9 +20,9 @@ use crate::wrappers::mj_model::{MjModel, MjtObjBase, MjtJoint, MjtDisableBit, Mj
 use crate::wrappers::mj_visualization::{MjvOption, MjvCamera, MjtCamera, MjvScene};
 use crate::wrappers::fun::{mju_normalize_3, mju_normalize_4, mju_quat_2_vel};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
+use crate::mujoco_c::{mjNGROUP, mjMINIMP, mjMAXIMP, mjMINMU};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::{cast_mut_info, set_flag};
-use crate::mujoco_c::mjNGROUP;
 use crate::util::LockUnpoison;
 
 /* UI Fonts */
@@ -248,6 +249,8 @@ struct JointComponentDisplayInfo {
     /// Range of the slider of the component, or [`None`] when the component has no natural range
     /// and takes a numeric input instead.
     range: Option<RangeInclusive<MjtNum>>,
+    /// Unit suffix of the value.
+    unit: &'static str,
 }
 
 /// Cached display information about the position components of a joint that form a quaternion.
@@ -404,10 +407,13 @@ impl ViewerUI {
                 // A free joint holds no limit and no natural range, so each of its components
                 // takes a numeric input.
                 MjtJoint::mjJNT_FREE => {
-                    let components = FREE_JOINT_TRANSLATION_COMPONENTS.into_iter()
-                        .chain(JOINT_QUAT_COMPONENTS)
-                        .map(|label| JointComponentDisplayInfo { label: Some(label), range: None })
-                        .collect();
+                    let translation = FREE_JOINT_TRANSLATION_COMPONENTS.map(|label| {
+                        JointComponentDisplayInfo { label: Some(label), range: None, unit: " m" }
+                    });
+                    let rotation = JOINT_QUAT_COMPONENTS.map(|label| {
+                        JointComponentDisplayInfo { label: Some(label), range: None, unit: "" }
+                    });
+                    let components = translation.into_iter().chain(rotation).collect();
 
                     (components, Some(JointQuatDisplayInfo { offset: 3, angle_limit }))
                 }
@@ -415,7 +421,7 @@ impl ViewerUI {
                 // A quaternion component always lies inside the unit sphere.
                 MjtJoint::mjJNT_BALL => {
                     let components = JOINT_QUAT_COMPONENTS.map(|label| {
-                        JointComponentDisplayInfo { label: Some(label), range: Some(-1.0..=1.0) }
+                        JointComponentDisplayInfo { label: Some(label), range: Some(-1.0..=1.0), unit: "" }
                     });
 
                     (components.into(), Some(JointQuatDisplayInfo { offset: 0, angle_limit }))
@@ -424,13 +430,14 @@ impl ViewerUI {
                 // A slide or a hinge joint holds one position component, which the limit applies
                 // to. Without a limit the slider spans the same range as MuJoCo's own viewer.
                 joint_type => {
+                    let is_slide = joint_type == MjtJoint::mjJNT_SLIDE;
                     let range = if model.jnt_limited()[idx_joint] {
                         limits[0]..=limits[1]
-                    } else if joint_type == MjtJoint::mjJNT_SLIDE {
+                    } else if is_slide {
                         -1.0..=1.0
                     } else { -PI..=PI };
-
-                    ([JointComponentDisplayInfo { label: None, range: Some(range) }].into(), None)
+                    let unit = if is_slide { " m" } else { " rad" };
+                    ([JointComponentDisplayInfo { label: None, range: Some(range), unit }].into(), None)
                 }
             };
 
@@ -660,115 +667,36 @@ impl ViewerUI {
 
                         ui.collapsing(RichText::new("Algorithm parameters").font(MAIN_FONT), |ui| {
                             egui::Grid::new("algo_param_grid").num_columns(2).show(ui, |ui| {
-                                ui.add(
-                                    RowScalar::new("Timestep", &mut options.timestep, 1e-6)
-                                        .range(0.0..=f64::INFINITY)
+                                name_scalar_row(ui, "Timestep", &mut options.timestep, 1e-6, 0.0..=f64::INFINITY);
+                                name_scalar_row(ui, "Iterations", &mut options.iterations, 1.0, 1..=i32::MAX);
+                                name_scalar_row(ui, "Tolerance", &mut options.tolerance, 1e-8, 0.0..=f64::INFINITY);
+                                name_scalar_row(ui, "LS Iter", &mut options.ls_iterations, 1.0, 1..=i32::MAX);
+                                name_scalar_row(ui, "LS Tol", &mut options.ls_tolerance, 1e-8, 0.0..=f64::INFINITY);
+                                name_scalar_row(ui, "Noslip Iter", &mut options.noslip_iterations, 1.0, 0..=i32::MAX);
+                                name_scalar_row(
+                                    ui, "Noslip Tol", &mut options.noslip_tolerance, 1e-8,
+                                    0.0..=f64::INFINITY
                                 );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Iterations", &mut options.iterations, 1.0)
-                                        .range(1..=i32::MAX)
+                                name_scalar_row(ui, "CCD Iter", &mut options.ccd_iterations, 1.0, 1..=i32::MAX);
+                                name_scalar_row(ui, "CCD Tol", &mut options.ccd_tolerance, 1e-8, 0.0..=f64::INFINITY);
+                                name_scalar_row(
+                                    ui, "Sleep Tol", &mut options.sleep_tolerance, 1e-8,
+                                    0.0..=f64::INFINITY
                                 );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Tolerance", &mut options.tolerance, 1e-8)
-                                        .range(0.0..=f64::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("LS Iter", &mut options.ls_iterations, 1.0)
-                                        .range(1..=i32::MAX)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("LS Tol", &mut options.ls_tolerance, 1e-8)
-                                        .range(0.0..=f64::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Noslip Iter", &mut options.noslip_iterations, 1.0)
-                                        .range(0..=i32::MAX)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Noslip Tol", &mut options.noslip_tolerance, 1e-8)
-                                        .range(0.0..=f64::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("CCD Iter", &mut options.ccd_iterations, 1.0)
-                                        .range(1..=i32::MAX)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("CCD Tol", &mut options.ccd_tolerance, 1e-8)
-                                        .range(0.0..=f64::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Sleep Tol", &mut options.sleep_tolerance, 1e-8)
-                                        .range(0.0..=f64::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("SDF Iter", &mut options.sdf_iterations, 1.0)
-                                        .range(1..=i32::MAX)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("SDF Init", &mut options.sdf_initpoints, 1.0)
-                                        .range(0..=i32::MAX)
-                                );
-                                ui.end_row();
+                                name_scalar_row(ui, "SDF Iter", &mut options.sdf_iterations, 1.0, 1..=i32::MAX);
+                                name_scalar_row(ui, "SDF Init", &mut options.sdf_initpoints, 1.0, 0..=i32::MAX);
 
                             });
                         });
 
                         ui.collapsing(RichText::new("Physics parameters").font(MAIN_FONT), |ui| {
                             egui::Grid::new("phys_param_grid").num_columns(2).show(ui, |ui| {
-                                ui.add(
-                                    RowScalar::new("Density", &mut options.density, 1e-3)
-                                        .range(0.0..=f64::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Viscosity", &mut options.viscosity, 1e-6)
-                                        .range(0.0..=f64::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Imp Ratio", &mut options.impratio, 1e-3)
-                                        .range(0.0..=f64::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(RowArray::new(
-                                    "Gravity", &mut options.gravity, 1e-3
-                                ));
-                                ui.end_row();
-
-                                ui.add(RowArray::new(
-                                    "Wind", &mut options.wind, 1e-3
-                                ));
-                                ui.end_row();
-
-                                ui.add(RowArray::new(
-                                    "Magnetic", &mut options.magnetic, 1e-3
-                                ));
-                                ui.end_row();
+                                name_scalar_row(ui, "Density", &mut options.density, 1e-3, 0.0..=f64::INFINITY);
+                                name_scalar_row(ui, "Viscosity", &mut options.viscosity, 1e-6, 0.0..=f64::INFINITY);
+                                name_scalar_row(ui, "Imp Ratio", &mut options.impratio, 1e-3, 0.0..=f64::INFINITY);
+                                name_array_row(ui, "Gravity", &mut options.gravity, 1e-3, None);
+                                name_array_row(ui, "Wind", &mut options.wind, 1e-3, None);
+                                name_array_row(ui, "Magnetic", &mut options.magnetic, 1e-3, None);
                             });
                         });
 
@@ -808,26 +736,19 @@ impl ViewerUI {
 
                         ui.collapsing(RichText::new("Contact Override").font(MAIN_FONT), |ui| {
                             egui::Grid::new("contact_override_grid").num_columns(2).show(ui, |ui| {
-                                ui.add(
-                                    RowScalar::new("Margin", &mut options.o_margin, 1e-5)
-                                        .range(0.0..=f64::INFINITY)
+                                name_scalar_row(ui, "Margin", &mut options.o_margin, 1e-5, 0.0..=f64::INFINITY);
+                                name_array_row(ui, "Sol Ref", &mut options.o_solref, 1e-5, None);
+                                name_array_row(ui, "Sol Imp", &mut options.o_solimp, 1e-3, Some(&[
+                                    mjMINIMP..=mjMAXIMP,
+                                    mjMINIMP..=mjMAXIMP,
+                                    0.0..=f64::INFINITY,
+                                    mjMINIMP..=mjMAXIMP,
+                                    1.0..=f64::INFINITY,
+                                ]));
+                                name_array_row(
+                                    ui, "Friction", &mut options.o_friction, 1e-3,
+                                    Some(&[const { mjMINMU..=f64::INFINITY }; 5])
                                 );
-                                ui.end_row();
-
-                                ui.add(RowArray::new(
-                                    "Sol Ref", &mut options.o_solref, 1e-5
-                                ));
-                                ui.end_row();
-
-                                ui.add(RowArray::new(
-                                    "Sol Imp", &mut options.o_solimp, 1e-3
-                                ));
-                                ui.end_row();
-
-                                ui.add(RowArray::new(
-                                    "Friction", &mut options.o_friction, 1e-3
-                                ));
-                                ui.end_row();
                             });
                         });
                         let mut lock = shared_viewer_state.lock_unpoison();
@@ -1050,14 +971,9 @@ impl ViewerUI {
                             });
                             ui.end_row();
 
-                            ui.add(RowArray::new("Ambient", &mut vis.headlight.ambient, 1e-3));
-                            ui.end_row();
-
-                            ui.add(RowArray::new("Diffuse", &mut vis.headlight.diffuse, 1e-3));
-                            ui.end_row();
-
-                            ui.add(RowArray::new("Specular", &mut vis.headlight.specular, 1e-3));
-                            ui.end_row();
+                            name_rgb_row(ui, "Ambient", &mut vis.headlight.ambient);
+                            name_rgb_row(ui, "Diffuse", &mut vis.headlight.diffuse);
+                            name_rgb_row(ui, "Specular", &mut vis.headlight.specular);
                         });
                     });
 
@@ -1073,20 +989,13 @@ impl ViewerUI {
                             });
                             ui.end_row();
 
-                            ui.add(
-                                RowScalar::new("Field of view", &mut vis.global.fovy, 1e-2)
-                                    .range(5.0..=175.0)
+                            name_scalar_row(ui, "Field of view", &mut vis.global.fovy, 1e-2, 5.0..=175.0);
+                            name_array_row(ui, "Center", &mut stat.center, 1e-3, None);
+                            name_scalar_row(
+                                ui, "Azimuth", &mut vis.global.azimuth, 1e-2,
+                                f32::NEG_INFINITY..=f32::INFINITY
                             );
-                            ui.end_row();
-
-                            ui.add(RowArray::new("Center", &mut stat.center, 1e-3));
-                            ui.end_row();
-
-                            ui.add(RowScalar::new("Azimuth", &mut vis.global.azimuth, 1e-2));
-                            ui.end_row();
-
-                            ui.add(RowScalar::new("Elevation", &mut vis.global.elevation, 1e-2));
-                            ui.end_row();
+                            name_scalar_row(ui, "Elevation (deg)", &mut vis.global.elevation, 1e-1, -89.0..=89.0);
 
                             if ui.button("Align").clicked() {
                                 self.events.push_back(UiEvent::AlignCamera);
@@ -1098,11 +1007,7 @@ impl ViewerUI {
                     // Global
                     ui.collapsing(RichText::new("Global").font(MAIN_FONT), |ui| {
                         egui::Grid::new("global_grid").num_columns(2).show(ui, |ui| {
-                            ui.add(
-                                RowScalar::new("Extent", &mut stat.extent, 1e-3)
-                                    .range(0.001..=f64::INFINITY)
-                            );
-                            ui.end_row();
+                            name_scalar_row(ui, "Extent", &mut stat.extent, 1e-3, 0.001..=f64::INFINITY);
 
                             ui.label("Inertia Geom");
                             ui.horizontal_top(|ui| {
@@ -1133,345 +1038,100 @@ impl ViewerUI {
                     // Map
                     ui.collapsing(RichText::new("Map").font(MAIN_FONT), |ui| {
                         egui::Grid::new("map_grid").num_columns(2).show(ui, |ui| {
-                            ui.add(
-                                RowScalar::new("Stiffness", &mut vis.map.stiffness, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
+                            name_scalar_row(ui, "Stiffness", &mut vis.map.stiffness, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(ui, "Rot stiffness", &mut vis.map.stiffnessrot, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(ui, "Force", &mut vis.map.force, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(ui, "Torque", &mut vis.map.torque, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(ui, "Alpha", &mut vis.map.alpha, 1e-3, 0.0..=1.0);
+                            name_scalar_row(
+                                ui, "Fog start", &mut vis.map.fogstart, 1e-3,
+                                0.0..=(vis.map.fogend - RANGE_PRECISION_TOLERANCE).max(0.0)
                             );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Rot stiffness", &mut vis.map.stiffnessrot, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
+                            name_scalar_row(
+                                ui, "Fog end", &mut vis.map.fogend, 1e-3,
+                                (vis.map.fogstart + RANGE_PRECISION_TOLERANCE)..=f32::INFINITY
                             );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Force", &mut vis.map.force, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
+                            name_scalar_row(
+                                ui, "Z near", &mut vis.map.znear, 1e-3,
+                                0.001..=(vis.map.zfar - RANGE_PRECISION_TOLERANCE)
                             );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Torque", &mut vis.map.torque, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
+                            name_scalar_row(
+                                ui, "Z far", &mut vis.map.zfar, 1e-3,
+                                (vis.map.znear + RANGE_PRECISION_TOLERANCE)..=f32::INFINITY
                             );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Alpha", &mut vis.map.alpha, 1e-3)
-                                    .range(0.0..=1.0)
+                            name_scalar_row(ui, "Haze", &mut vis.map.haze, 1e-3, 0.0..=1.0);
+                            name_scalar_row(ui, "Shadow clip", &mut vis.map.shadowclip, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(ui, "Shadow scale", &mut vis.map.shadowscale, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(
+                                ui, "Actuator tendon", &mut vis.map.actuatortendon, 1e-3,
+                                0.0..=f32::INFINITY
                             );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Fog start", &mut vis.map.fogstart, 1e-3)
-                                    .range(0.0..=(vis.map.fogend - RANGE_PRECISION_TOLERANCE).max(0.0))
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Fog end", &mut vis.map.fogend, 1e-3)
-                                    .range((vis.map.fogstart + RANGE_PRECISION_TOLERANCE)..=f32::INFINITY)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Z near", &mut vis.map.znear, 1e-3)
-                                    .range(0.001..=(vis.map.zfar - RANGE_PRECISION_TOLERANCE))
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Z far", &mut vis.map.zfar, 1e-3)
-                                    .range((vis.map.znear + RANGE_PRECISION_TOLERANCE)..=f32::INFINITY)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Haze", &mut vis.map.haze, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Shadow clip", &mut vis.map.shadowclip, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Shadow scale", &mut vis.map.shadowscale, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Actuator tendon", &mut vis.map.actuatortendon, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
-                            );
-                            ui.end_row();
                         });
                     });
 
                     // Scale
                     ui.collapsing(RichText::new("Scale").font(MAIN_FONT), |ui| {
                         egui::Grid::new("scale_grid").num_columns(2).show(ui, |ui| {
-                            ui.add(
-                                RowScalar::new("Force width", &mut vis.scale.forcewidth, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
+                            name_scalar_row(ui, "Force width", &mut vis.scale.forcewidth, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(
+                                ui, "Contact width", &mut vis.scale.contactwidth, 1e-3,
+                                0.0..=f32::INFINITY
                             );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Contact width", &mut vis.scale.contactwidth, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
+                            name_scalar_row(
+                                ui, "Contact height", &mut vis.scale.contactheight, 1e-3,
+                                0.0..=f32::INFINITY
                             );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Contact height", &mut vis.scale.contactheight, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
+                            name_scalar_row(ui, "Connect", &mut vis.scale.connect, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(ui, "COM", &mut vis.scale.com, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(ui, "Camera", &mut vis.scale.camera, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(ui, "Light", &mut vis.scale.light, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(ui, "Select point", &mut vis.scale.selectpoint, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(ui, "Joint length", &mut vis.scale.jointlength, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(ui, "Joint width", &mut vis.scale.jointwidth, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(
+                                ui, "Actuator length", &mut vis.scale.actuatorlength, 1e-3,
+                                0.0..=f32::INFINITY
                             );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Connect", &mut vis.scale.connect, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
+                            name_scalar_row(
+                                ui, "Actuator width", &mut vis.scale.actuatorwidth, 1e-3,
+                                0.0..=f32::INFINITY
                             );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("COM", &mut vis.scale.com, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Camera", &mut vis.scale.camera, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Light", &mut vis.scale.light, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Select point", &mut vis.scale.selectpoint, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Joint length", &mut vis.scale.jointlength, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Joint width", &mut vis.scale.jointwidth, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Actuator length", &mut vis.scale.actuatorlength, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Actuator width", &mut vis.scale.actuatorwidth, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Frame length", &mut vis.scale.framelength, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Frame width", &mut vis.scale.framewidth, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Constraint", &mut vis.scale.constraint, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Slider crank", &mut vis.scale.slidercrank, 1e-3)
-                                    .range(0.0..=f32::INFINITY)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowScalar::new("Frustum", &mut vis.scale.frustum, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
+                            name_scalar_row(ui, "Frame length", &mut vis.scale.framelength, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(ui, "Frame width", &mut vis.scale.framewidth, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(ui, "Constraint", &mut vis.scale.constraint, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(ui, "Slider crank", &mut vis.scale.slidercrank, 1e-3, 0.0..=f32::INFINITY);
+                            name_scalar_row(ui, "Frustum", &mut vis.scale.frustum, 1e-3, 0.0..=1.0);
                         });
                     });
 
                     // RGBA
                     ui.collapsing(RichText::new("RGBA").font(MAIN_FONT), |ui| {
                         egui::Grid::new("rgba_grid").num_columns(2).show(ui, |ui| {
-                            ui.add(
-                                RowArray::new("Fog", &mut vis.rgba.fog, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Haze", &mut vis.rgba.haze, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Force", &mut vis.rgba.force, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Inertia", &mut vis.rgba.inertia, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Joint", &mut vis.rgba.joint, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Actuator", &mut vis.rgba.actuator, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Actuator negative", &mut vis.rgba.actuatornegative, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Actuator positive", &mut vis.rgba.actuatorpositive, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("COM", &mut vis.rgba.com, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Camera", &mut vis.rgba.camera, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Light", &mut vis.rgba.light, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Select point", &mut vis.rgba.selectpoint, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Connect", &mut vis.rgba.connect, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Contact point", &mut vis.rgba.contactpoint, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Contact force", &mut vis.rgba.contactforce, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Contact friction", &mut vis.rgba.contactfriction, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Contact torque", &mut vis.rgba.contacttorque, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Contact gap", &mut vis.rgba.contactgap, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Rangefinder", &mut vis.rgba.rangefinder, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Constraint", &mut vis.rgba.constraint, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Slider crank", &mut vis.rgba.slidercrank, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Crank broken", &mut vis.rgba.crankbroken, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Frustum", &mut vis.rgba.frustum, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("BV", &mut vis.rgba.bv, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("BV active", &mut vis.rgba.bvactive, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
+                            name_rgba_row(ui, "Fog", &mut vis.rgba.fog);
+                            name_rgba_row(ui, "Haze", &mut vis.rgba.haze);
+                            name_rgba_row(ui, "Force", &mut vis.rgba.force);
+                            name_rgba_row(ui, "Inertia", &mut vis.rgba.inertia);
+                            name_rgba_row(ui, "Joint", &mut vis.rgba.joint);
+                            name_rgba_row(ui, "Actuator", &mut vis.rgba.actuator);
+                            name_rgba_row(ui, "Actuator negative", &mut vis.rgba.actuatornegative);
+                            name_rgba_row(ui, "Actuator positive", &mut vis.rgba.actuatorpositive);
+                            name_rgba_row(ui, "COM", &mut vis.rgba.com);
+                            name_rgba_row(ui, "Camera", &mut vis.rgba.camera);
+                            name_rgba_row(ui, "Light", &mut vis.rgba.light);
+                            name_rgba_row(ui, "Select point", &mut vis.rgba.selectpoint);
+                            name_rgba_row(ui, "Connect", &mut vis.rgba.connect);
+                            name_rgba_row(ui, "Contact point", &mut vis.rgba.contactpoint);
+                            name_rgba_row(ui, "Contact force", &mut vis.rgba.contactforce);
+                            name_rgba_row(ui, "Contact friction", &mut vis.rgba.contactfriction);
+                            name_rgba_row(ui, "Contact torque", &mut vis.rgba.contacttorque);
+                            name_rgba_row(ui, "Contact gap", &mut vis.rgba.contactgap);
+                            name_rgba_row(ui, "Rangefinder", &mut vis.rgba.rangefinder);
+                            name_rgba_row(ui, "Constraint", &mut vis.rgba.constraint);
+                            name_rgba_row(ui, "Slider crank", &mut vis.rgba.slidercrank);
+                            name_rgba_row(ui, "Crank broken", &mut vis.rgba.crankbroken);
+                            name_rgba_row(ui, "Frustum", &mut vis.rgba.frustum);
+                            name_rgba_row(ui, "BV", &mut vis.rgba.bv);
+                            name_rgba_row(ui, "BV active", &mut vis.rgba.bvactive);
                         });
                     });
 
@@ -1577,12 +1237,14 @@ impl ViewerUI {
                                         egui::Slider::new(value, range.clone())
                                         .clamping(egui::SliderClamping::Never)
                                         .update_while_editing(false)
+                                        .suffix(component.unit)
                                     ),
 
                                     None => ui.add(
                                         egui::DragValue::new(value)
                                         .speed(JOINT_INPUT_DRAG_SPEED)
                                         .update_while_editing(false)
+                                        .suffix(component.unit)
                                     )
                                 }.changed();
                             }
@@ -1603,17 +1265,14 @@ impl ViewerUI {
                             if let Some(limit) = angle_limit {
                                 let mut angle_axis = [0.0; 3];
                                 mju_quat_2_vel(&mut angle_axis, joint_quat, 1.0);
-                                let mut angle = mju_normalize_3(&mut angle_axis);
+                                let angle = mju_normalize_3(&mut angle_axis);
 
                                 ui.horizontal(|ui| {
                                     ui.label(RichText::new("angle").font(MAIN_FONT));
-                                    ui.add_enabled(
-                                        false,
-                                        egui::DragValue::new(&mut angle).suffix(" rad")
-                                    );
                                     let angle_scaled = (angle / limit).clamp(0.0, 1.0);
                                     ui.add(
                                         egui::ProgressBar::new(angle_scaled as f32)
+                                        .text(format!("{angle:.3} rad"))
                                         .desired_width(JOINT_ANGLE_BAR_WIDTH)
                                     );
                                 });
@@ -1878,91 +1537,66 @@ pub(crate) enum UiEvent {
 
 
 // Extra widgets
-#[must_use = "use ui.add( row_scalar )"]
-struct RowScalar<'t, Num: egui::emath::Numeric> {
-    name: egui::WidgetText,
-    target: &'t mut Num,
-    increment: f64,
-    maybe_range: Option<std::ops::RangeInclusive<Num>>
+/// Adds a grid row with a label and a numeric input bounded to `range`.
+fn name_scalar_row<Num: egui::emath::Numeric>(
+    ui: &mut egui::Ui,
+    name: &str,
+    value: &mut Num,
+    speed: f64,
+    range: RangeInclusive<Num>,
+)
+{
+    ui.label(name);
+    ui.horizontal_top(|ui| {
+        ui.add_sized(
+            [ui.available_width().min(MAX_SPAN_WIDTH), ui.spacing().interact_size.y],
+            egui::DragValue::new(value).speed(speed).range(range)
+        )
+    });
+    ui.end_row();
 }
 
-impl<'t, Num: egui::emath::Numeric> RowScalar<'t, Num> {
-    fn new(name: impl Into<egui::WidgetText>, target: &'t mut Num, increment: f64) -> Self {
-        Self { name: name.into(), target, increment, maybe_range: None }
-    }
+/// Adds a grid row with a label and a numeric input per value, each bounded to the range at the
+/// same index of `ranges`.
+fn name_array_row<const NUM_VALUES: usize, Num: egui::emath::Numeric>(
+    ui: &mut egui::Ui,
+    name: &str,
+    values: &mut [Num; NUM_VALUES],
+    speed: f64,
+    ranges: Option<&[RangeInclusive<Num>; NUM_VALUES]>,
+)
+{
+    ui.label(name);
 
-    fn range(mut self, range: std::ops::RangeInclusive<Num>) -> Self {
-        self.maybe_range = Some(range);
-        self
-    }
-}
+    let interact_height = ui.spacing().interact_size.y;
+    let available_width = ui.available_width().min(MAX_SPAN_WIDTH);
 
-impl<'t, Num: egui::emath::Numeric> egui::Widget for RowScalar<'t, Num> {
-    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        let mut drag = egui::DragValue::new(self.target)
-            .speed(self.increment);
-
-        if let Some(range) = self.maybe_range {
-            drag = drag.range(range);
-        }
-
-        ui.label(self.name);
-        ui.horizontal_top(|ui| {
-            ui.add_sized(
-                [ui.available_width().min(MAX_SPAN_WIDTH), ui.spacing().interact_size.y],
-                drag
-            )
-        }).inner
-    }
-}
-
-struct RowArray<'t, Num: egui::emath::Numeric> {
-    name: egui::WidgetText,
-    values: &'t mut [Num],
-    increment: f64,
-    maybe_range: Option<std::ops::RangeInclusive<Num>>,
-}
-
-impl<'t, Num: egui::emath::Numeric> RowArray<'t, Num> {
-    fn new(name: impl Into<egui::WidgetText>, values: &'t mut [Num], increment: f64) -> Self {
-        Self { name: name.into(), values, increment, maybe_range: None }
-    }
-
-    fn range(mut self, range: std::ops::RangeInclusive<Num>) -> Self {
-        self.maybe_range = Some(range);
-        self
-    }
-}
-
-impl<'t, Num: egui::emath::Numeric> egui::Widget for RowArray<'t, Num> {
-    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        ui.label(self.name);
-
-        let interact_height = ui.spacing().interact_size.y;
-        let available_width = ui.available_width().min(MAX_SPAN_WIDTH);
-
-        let values_len = self.values.len();
-        let x_spacing = ui.spacing_mut().item_spacing.y;
-        ui.spacing_mut().item_spacing.x = x_spacing;
-        let per_element_width = (available_width - x_spacing * (values_len - 1) as f32) / values_len as f32;
-        let response = ui.horizontal_top(|ui| {            
-            let mut last_response = None;
-            for value in self.values.iter_mut() {
-                let mut drag = egui::DragValue::new(value)
-                    .speed(self.increment);
-
-                if let Some(range) = &self.maybe_range {
-                    drag = drag.range(range.clone());
-                }
-
-                last_response = Some(ui.add_sized(
-                    [per_element_width, interact_height],
-                    drag
-                ));
+    let x_spacing = ui.spacing_mut().item_spacing.y;
+    ui.spacing_mut().item_spacing.x = x_spacing;
+    let per_element_width = (available_width - x_spacing * (NUM_VALUES - 1) as f32) / NUM_VALUES as f32;
+    ui.horizontal_top(|ui| {
+        for (i, value) in values.iter_mut().enumerate() {
+            let mut drag = egui::DragValue::new(value).speed(speed);
+            if let Some(ranges) = ranges {
+                drag = drag.range(ranges[i].clone());
             }
-            last_response.unwrap_or_else(|| ui.label(""))
-        });
 
-        response.response
-    }
+            ui.add_sized([per_element_width, interact_height], drag);
+        }
+    });
+    ui.end_row();
+}
+
+/// Adds a grid row with a label and an RGBA color picker.
+fn name_rgba_row(ui: &mut egui::Ui, name: &str, rgba: &mut [f32; 4]) {
+    ui.label(name);
+    egui::color_picker::color_edit_button_rgba(ui, bytemuck::must_cast_mut(rgba), Alpha::OnlyBlend);
+    ui.end_row();
+}
+
+/// Adds a grid row with a label and an RGB color picker.
+fn name_rgb_row(ui: &mut egui::Ui, name: &str, rgb: &mut [f32; 3]) {
+    ui.label(name);
+    egui::color_picker::color_edit_button_rgb(ui, rgb);
+    ui.end_row();
 }
