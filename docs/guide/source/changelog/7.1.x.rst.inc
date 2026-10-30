@@ -17,6 +17,11 @@
   :docs-rs:`~~mujoco_rs::wrappers::mj_batch::<struct>MjBatch::<method>rollout` records after each
   step.
 
+*Viewer UI*
+
+- The RGBA section of the :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` UI now uses color pickers
+  instead of numeric fields, so colors can be chosen visually.
+
 .. rubric:: New examples
 
 - :gh-example:`Batched simulation <simulation/batched.rs>` --- runs many simulations in parallel
