@@ -42,9 +42,9 @@ use bytemuck::Pod;
 
 use crate::mujoco_c::{
     mjBatch, mjBatchConfig, mjBatchRecord, mj_stateSize, mjb_defaultConfig, mjb_deleteBatch,
-    mjb_error, mjb_expand, mjb_forward, mjb_getData, mjb_getModel, mjb_model, mjb_makeBatch,
-    mjb_nstate, mjb_nthread, mjb_output, mjb_persistent, mjb_reset, mjb_rollout, mjb_state,
-    mjb_status, mjb_step, mjb_warning
+    mjb_error, mjb_expand, mjb_expanded, mjb_forward, mjb_getData, mjb_getModel, mjb_model,
+    mjb_makeBatch, mjb_nstate, mjb_nthread, mjb_output, mjb_persistent, mjb_reset, mjb_rollout,
+    mjb_state, mjb_status, mjb_step, mjb_warning
 };
 use crate::wrappers::mj_model::{MjModel, MjModelLayout, MjtStage};
 use crate::util::{ERROR_BUF_LEN, checked_c_len, string_from_c};
@@ -650,6 +650,40 @@ impl MjBatch {
         Ok(unsafe { std::slice::from_raw_parts_mut(ptr.as_ptr(), len) })
     }
 
+    /// Returns the expanded `name` field of [`MjModel`] without expanding it, as a slice.
+    /// The slice is of dimension `num_sim x num_elements(name)`.
+    /// Wraps [`mjb_expanded`].
+    ///
+    /// # Note
+    /// The type `T` is enforced the same way as in [`output`](MjBatch::output).
+    ///
+    /// # Errors
+    /// - Returns [`MjBatchError::NotExpanded`] if `name` is not an [`MjModel`] field, is an asset
+    ///   field or is not expanded.
+    /// - Returns [`MjBatchError::FieldTypeMismatch`] if `T` is not the same byte-size
+    ///   of the field named `name` or if the expanded data is not aligned to `T`.
+    ///
+    /// # Panics
+    /// Panics if `name` contains a NUL byte.
+    pub fn expanded<T: Pod>(&self, name: &str) -> Result<&[T], MjBatchError> {
+        let (mut len, mut element_size) = (0, 0);
+        let c_string = CString::new(name).expect("name contained nul-bytes");
+
+        // SAFETY: handle is always valid while MjBatch is alive.
+        // `c_string` is NUL-terminated.
+        let ptr = unsafe { mjb_expanded(
+            self.handle.as_ptr(), c_string.as_ptr(),
+            &mut len, &mut element_size
+        ) };
+
+        // Null for an unknown name, for an asset field and for a field that is not expanded.
+        let ptr = NonNull::new(ptr.cast_mut())
+            .ok_or_else(|| MjBatchError::NotExpanded(name.to_owned()))?;
+        let (ptr, len) = self.typed_field::<T>(name, (ptr, len as usize, element_size as usize))?;
+        // SAFETY: as in `output`.
+        Ok(unsafe { std::slice::from_raw_parts(ptr.as_ptr(), len) })
+    }
+
     /// Checks that `T` matches the elements of the `num_sim x len` storage at `ptr` and returns
     /// the typed pointer and the total element count.
     fn typed_field<T: Pod>(
@@ -685,6 +719,5 @@ impl Drop for MjBatch {
 //         of a call, and any thread can make calls on the thread pool or delete the batch.
 unsafe impl Send for MjBatch {}
 
-// SAFETY: every `&self` method only reads the batch: the sizes and buffers are fixed after
-//         creation, and `mjb_getData` reads under the batch's internal mutex. Writes take `&mut self`.
+// SAFETY: non-mutable references do not mutate internally. Regardless, an internal mutex is present inside MuJoCo.
 unsafe impl Sync for MjBatch {}
