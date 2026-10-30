@@ -571,9 +571,12 @@ pub enum MjBatchError {
     /// The name is not an [`MjData`](crate::wrappers::MjData) field that the batch can output.
     /// Carries the name.
     InvalidOutput(String),
-    /// The requested element type does not match the elements of the output field.
-    OutputTypeMismatch {
-        /// Name of the output field.
+    /// The name is not an [`MjModel`](crate::wrappers::MjModel) field that the batch can expand.
+    /// Carries the name.
+    InvalidExpand(String),
+    /// The requested element type does not match the elements of the field.
+    FieldTypeMismatch {
+        /// Name of the field.
         name: String,
         /// Size of one element of the field, in bytes.
         element_size: usize,
@@ -586,8 +589,9 @@ impl fmt::Display for MjBatchError {
             Self::MakeFailed(msg) => write!(f, "batch creation failed: {msg}"),
             Self::IncompatibleModel { .. } => write!(f, "incompatible model"),
             Self::InvalidOutput(name) => write!(f, "invalid batch output field '{name}'"),
-            Self::OutputTypeMismatch { name, element_size } => write!(
-                f, "element type does not match output field '{name}' ({element_size}-byte elements)"
+            Self::InvalidExpand(name) => write!(f, "invalid batch expand field '{name}'"),
+            Self::FieldTypeMismatch { name, element_size } => write!(
+                f, "element type does not match field '{name}' ({element_size}-byte elements)"
             ),
         }
     }

@@ -42,9 +42,9 @@ use bytemuck::Pod;
 
 use crate::mujoco_c::{
     mjBatch, mjBatchConfig, mjBatchRecord, mj_stateSize, mjb_defaultConfig, mjb_deleteBatch,
-    mjb_error, mjb_forward, mjb_getData, mjb_getModel, mjb_model, mjb_makeBatch, mjb_nstate,
-    mjb_nthread, mjb_output, mjb_persistent, mjb_reset, mjb_rollout, mjb_state, mjb_status,
-    mjb_step, mjb_warning
+    mjb_error, mjb_expand, mjb_forward, mjb_getData, mjb_getModel, mjb_model, mjb_makeBatch,
+    mjb_nstate, mjb_nthread, mjb_output, mjb_persistent, mjb_reset, mjb_rollout, mjb_state,
+    mjb_status, mjb_step, mjb_warning
 };
 use crate::wrappers::mj_model::{MjModel, MjModelLayout, MjtStage};
 use crate::util::{ERROR_BUF_LEN, checked_c_len, string_from_c};
@@ -569,20 +569,16 @@ impl MjBatch {
     /// # Errors
     /// - Returns [`MjBatchError::InvalidOutput`] if `name` is not an [`MjData`] field or is a
     ///   state field (read state fields with [`state_at`](MjBatch::state_at)).
-    /// - Returns [`MjBatchError::OutputTypeMismatch`] if `T` is not the same byte-size
+    /// - Returns [`MjBatchError::FieldTypeMismatch`] if `T` is not the same byte-size
     ///   of the field named `name` or if the output data is not aligned to `T`.
     ///
     /// # Panics
     /// Panics if `name` contains a NUL byte.
     pub fn output<T: Pod>(&mut self, name: &str) -> Result<&[T], MjBatchError> {
-        let (ptr, len, element_size) = self.mjb_output(name)?;
-
-        if size_of::<T>() != element_size || !ptr.cast::<T>().is_aligned() {
-            return Err(MjBatchError::OutputTypeMismatch { name: name.to_owned(), element_size });
-        }
-
-        // SAFETY: pointer and sizes and alignment verified above.
-        Ok(unsafe { std::slice::from_raw_parts(ptr.as_ptr().cast(), self.num_sim * len) })
+        let field = self.mjb_output(name)?;
+        let (ptr, len) = self.typed_field::<T>(name, field)?;
+        // SAFETY: pointer and sizes and alignment verified by `typed_field`.
+        Ok(unsafe { std::slice::from_raw_parts(ptr.as_ptr(), len) })
     }
 
     /// Registers the output `name` to be filled at the next batch call with [`MjData`] field data
@@ -615,12 +611,64 @@ impl MjBatch {
         let ptr = NonNull::new(ptr).ok_or_else(|| MjBatchError::InvalidOutput(name.to_owned()))?;
         Ok((ptr, len as usize, element_size as usize))
     }
+
+    /// Makes the `name` field of [`MjModel`] be separate for each simulation instance.
+    /// This means that, before each step, the parameter named `name` will be copied from the
+    /// this method's returned slice into [`MjModel`] instances inside corresponding threads.
+    /// The slice is of dimension `num_sim x num_elements(name)`.
+    /// Wraps [`mjb_expand`].
+    ///
+    /// # Note
+    /// The type `T` is enforced the same way as in [`output`](MjBatch::output).
+    ///
+    /// # Safety
+    /// MuJoCo uses some [`MjModel`] fields as indices, addresses or counts (e.g., `body_parentid`,
+    /// `jnt_qposadr`). Values written to such a field must stay valid for the model.
+    ///
+    /// # Errors
+    /// - Returns [`MjBatchError::InvalidExpand`] if `name` is not an [`MjModel`] field or is an
+    ///   asset field.
+    /// - Returns [`MjBatchError::FieldTypeMismatch`] if `T` is not the same byte-size
+    ///   of the field named `name` or if the expanded data is not aligned to `T`.
+    ///
+    /// # Panics
+    /// Panics if `name` contains a NUL byte.
+    pub unsafe fn expand<T: Pod>(&mut self, name: &str) -> Result<&mut [T], MjBatchError> {
+        let (mut len, mut element_size) = (0, 0);
+        let c_string = CString::new(name).expect("name contained nul-bytes");
+
+        // SAFETY: handle is always valid while MjBatch is alive and `c_string` is NUL-terminated.
+        let ptr = unsafe { mjb_expand(
+            self.handle.as_ptr(), c_string.as_ptr(),
+            &mut len, &mut element_size
+        ) };
+
+        // Null for an unknown name and for an asset field.
+        let ptr = NonNull::new(ptr).ok_or_else(|| MjBatchError::InvalidExpand(name.to_owned()))?;
+        let (ptr, len) = self.typed_field::<T>(name, (ptr, len as usize, element_size as usize))?;
+        // SAFETY: as in `output`; `&mut self` makes the borrow exclusive.
+        Ok(unsafe { std::slice::from_raw_parts_mut(ptr.as_ptr(), len) })
+    }
+
+    /// Checks that `T` matches the elements of the `num_sim x len` storage at `ptr` and returns
+    /// the typed pointer and the total element count.
+    fn typed_field<T: Pod>(
+        &self, name: &str, (ptr, len, element_size): (NonNull<c_void>, usize, usize)
+    ) -> Result<(NonNull<T>, usize), MjBatchError>
+    {
+        let ptr = ptr.cast::<T>();
+        if size_of::<T>() != element_size || !ptr.is_aligned() {
+            return Err(MjBatchError::FieldTypeMismatch { name: name.to_owned(), element_size });
+        }
+        Ok((ptr, self.num_sim * len))
+    }
 }
 
 impl fmt::Debug for MjBatch {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MjBatch")
             .field("num_sim", &self.num_sim)
+            .field("num_thread", &self.num_thread())
             .finish_non_exhaustive()
     }
 }
