@@ -568,6 +568,16 @@ pub enum MjBatchError {
         /// Layout of the data's model.
         destination: Arc<MjModelLayout>,
     },
+    /// The name is not an [`MjData`](crate::wrappers::MjData) field that the batch can output.
+    /// Carries the name.
+    InvalidOutput(String),
+    /// The requested element type does not match the elements of the output field.
+    OutputTypeMismatch {
+        /// Name of the output field.
+        name: String,
+        /// Size of one element of the field, in bytes.
+        element_size: usize,
+    },
 }
 
 impl fmt::Display for MjBatchError {
@@ -575,6 +585,10 @@ impl fmt::Display for MjBatchError {
         match self {
             Self::MakeFailed(msg) => write!(f, "batch creation failed: {msg}"),
             Self::IncompatibleModel { .. } => write!(f, "incompatible model"),
+            Self::InvalidOutput(name) => write!(f, "invalid batch output field '{name}'"),
+            Self::OutputTypeMismatch { name, element_size } => write!(
+                f, "element type does not match output field '{name}' ({element_size}-byte elements)"
+            ),
         }
     }
 }

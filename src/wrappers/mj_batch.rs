@@ -32,17 +32,19 @@
 //! }
 //! ```
 use std::slice::{ChunksExact, ChunksExactMut};
+use std::ffi::{CStr, CString, c_void};
 use std::ptr::{self, NonNull};
 use std::mem::MaybeUninit;
 use std::sync::Arc;
-use std::ffi::CStr;
 use std::fmt;
+
+use bytemuck::Pod;
 
 use crate::mujoco_c::{
     mjBatch, mjBatchConfig, mjBatchRecord, mj_stateSize, mjb_defaultConfig, mjb_deleteBatch,
     mjb_error, mjb_forward, mjb_getData, mjb_getModel, mjb_model, mjb_makeBatch, mjb_nstate,
-    mjb_nthread, mjb_persistent, mjb_reset, mjb_rollout, mjb_state, mjb_status, mjb_step,
-    mjb_warning
+    mjb_nthread, mjb_output, mjb_persistent, mjb_reset, mjb_rollout, mjb_state, mjb_status,
+    mjb_step, mjb_warning
 };
 use crate::wrappers::mj_model::{MjModel, MjModelLayout, MjtStage};
 use crate::util::{ERROR_BUF_LEN, checked_c_len, string_from_c};
@@ -56,7 +58,8 @@ use crate::error::MjBatchError;
 pub type MjBatchConfig = mjBatchConfig;
 
 impl Default for MjBatchConfig {
-    /// Set the default mjBatchConfig parameters: one thread per logical CPU, and one mjData per thread.
+    /// Set the default [`MjBatchConfig`] parameters: one thread per logical CPU, and one
+    /// [`MjData`] per thread.
     /// Wraps [`mjb_defaultConfig`].
     fn default() -> Self {
         let mut uninit = MaybeUninit::uninit();
@@ -551,6 +554,66 @@ impl MjBatch {
         }
 
         Ok(())
+    }
+
+    /// Reads the output `name` from instances of [`MjData`].
+    /// The slice is of dimension `num_sim x num_elements(name)`.
+    /// Wraps [`mjb_output`].
+    ///
+    /// # Note
+    /// The output type `T` is only partially enforced, specifically in size and alignment.
+    /// These enforcements do not prevent the type from being wrong. For example, you may pass
+    /// `T` to be [`f32`] while the real type would be [`i32`] and the call would succeed.
+    /// This is not undefined behavior, however, the data itself will be incorrectly interpreted.
+    ///
+    /// # Errors
+    /// - Returns [`MjBatchError::InvalidOutput`] if `name` is not an [`MjData`] field or is a
+    ///   state field (read state fields with [`state_at`](MjBatch::state_at)).
+    /// - Returns [`MjBatchError::OutputTypeMismatch`] if `T` is not the same byte-size
+    ///   of the field named `name` or if the output data is not aligned to `T`.
+    ///
+    /// # Panics
+    /// Panics if `name` contains a NUL byte.
+    pub fn output<T: Pod>(&mut self, name: &str) -> Result<&[T], MjBatchError> {
+        let (ptr, len, element_size) = self.mjb_output(name)?;
+
+        if size_of::<T>() != element_size || !ptr.cast::<T>().is_aligned() {
+            return Err(MjBatchError::OutputTypeMismatch { name: name.to_owned(), element_size });
+        }
+
+        // SAFETY: pointer and sizes and alignment verified above.
+        Ok(unsafe { std::slice::from_raw_parts(ptr.as_ptr().cast(), self.num_sim * len) })
+    }
+
+    /// Registers the output `name` to be filled at the next batch call with [`MjData`] field data
+    /// of every simulation instance in the batch.
+    /// Wraps [`mjb_output`].
+    ///
+    /// # Errors
+    /// Returns [`MjBatchError::InvalidOutput`] if `name` is not an [`MjData`] field or is a state
+    /// field (read state fields with [`state_at`](MjBatch::state_at)).
+    ///
+    /// # Panics
+    /// Panics if `name` contains a NUL byte.
+    pub fn output_register(&mut self, name: &str) -> Result<(), MjBatchError> {
+        self.mjb_output(name).map(|_| ())
+    }
+
+    /// Registers the output `name` and returns its storage, its element count per simulation and
+    /// its element size in bytes.
+    fn mjb_output(&mut self, name: &str) -> Result<(NonNull<c_void>, usize, usize), MjBatchError> {
+        let (mut len, mut element_size) = (0, 0);
+        let c_string = CString::new(name).expect("name contained nul-bytes");
+
+        // SAFETY: handle is always valid while MjBatch is alive and `c_string` is NUL-terminated.
+        let ptr = unsafe { mjb_output(
+            self.handle.as_ptr(), c_string.as_ptr(),
+            &raw mut len, &raw mut element_size
+        ) };
+
+        // Null for an unknown name and for a state field.
+        let ptr = NonNull::new(ptr).ok_or_else(|| MjBatchError::InvalidOutput(name.to_owned()))?;
+        Ok((ptr, len as usize, element_size as usize))
     }
 }
 
