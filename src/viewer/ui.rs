@@ -7,10 +7,11 @@ use std::f64::consts::PI;
 use std::borrow::Cow;
 use std::fmt::Debug;
 
+use egui::{FontId, Id, LayerId, Order, RichText};
 use egui_winit::winit::event::WindowEvent;
 use egui_glow::glow::{self, HasContext};
-use egui::{FontId, RichText, LayerId, Order, Id};
 use egui_winit::winit::window::Window;
+use egui::color_picker::Alpha;
 use egui_winit::egui;
 use egui_winit;
 use log::info;
@@ -1323,155 +1324,31 @@ impl ViewerUI {
                     // RGBA
                     ui.collapsing(RichText::new("RGBA").font(MAIN_FONT), |ui| {
                         egui::Grid::new("rgba_grid").num_columns(2).show(ui, |ui| {
-                            ui.add(
-                                RowArray::new("Fog", &mut vis.rgba.fog, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Haze", &mut vis.rgba.haze, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Force", &mut vis.rgba.force, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Inertia", &mut vis.rgba.inertia, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Joint", &mut vis.rgba.joint, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Actuator", &mut vis.rgba.actuator, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Actuator negative", &mut vis.rgba.actuatornegative, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Actuator positive", &mut vis.rgba.actuatorpositive, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("COM", &mut vis.rgba.com, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Camera", &mut vis.rgba.camera, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Light", &mut vis.rgba.light, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Select point", &mut vis.rgba.selectpoint, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Connect", &mut vis.rgba.connect, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Contact point", &mut vis.rgba.contactpoint, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Contact force", &mut vis.rgba.contactforce, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Contact friction", &mut vis.rgba.contactfriction, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Contact torque", &mut vis.rgba.contacttorque, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Contact gap", &mut vis.rgba.contactgap, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Rangefinder", &mut vis.rgba.rangefinder, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Constraint", &mut vis.rgba.constraint, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Slider crank", &mut vis.rgba.slidercrank, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Crank broken", &mut vis.rgba.crankbroken, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("Frustum", &mut vis.rgba.frustum, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("BV", &mut vis.rgba.bv, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
-
-                            ui.add(
-                                RowArray::new("BV active", &mut vis.rgba.bvactive, 1e-3)
-                                    .range(0.0..=1.0)
-                            );
-                            ui.end_row();
+                            name_rgba_row(ui, "Fog", &mut vis.rgba.fog);
+                            name_rgba_row(ui, "Haze", &mut vis.rgba.haze);
+                            name_rgba_row(ui, "Force", &mut vis.rgba.force);
+                            name_rgba_row(ui, "Inertia", &mut vis.rgba.inertia);
+                            name_rgba_row(ui, "Joint", &mut vis.rgba.joint);
+                            name_rgba_row(ui, "Actuator", &mut vis.rgba.actuator);
+                            name_rgba_row(ui, "Actuator negative", &mut vis.rgba.actuatornegative);
+                            name_rgba_row(ui, "Actuator positive", &mut vis.rgba.actuatorpositive);
+                            name_rgba_row(ui, "COM", &mut vis.rgba.com);
+                            name_rgba_row(ui, "Camera", &mut vis.rgba.camera);
+                            name_rgba_row(ui, "Light", &mut vis.rgba.light);
+                            name_rgba_row(ui, "Select point", &mut vis.rgba.selectpoint);
+                            name_rgba_row(ui, "Connect", &mut vis.rgba.connect);
+                            name_rgba_row(ui, "Contact point", &mut vis.rgba.contactpoint);
+                            name_rgba_row(ui, "Contact force", &mut vis.rgba.contactforce);
+                            name_rgba_row(ui, "Contact friction", &mut vis.rgba.contactfriction);
+                            name_rgba_row(ui, "Contact torque", &mut vis.rgba.contacttorque);
+                            name_rgba_row(ui, "Contact gap", &mut vis.rgba.contactgap);
+                            name_rgba_row(ui, "Rangefinder", &mut vis.rgba.rangefinder);
+                            name_rgba_row(ui, "Constraint", &mut vis.rgba.constraint);
+                            name_rgba_row(ui, "Slider crank", &mut vis.rgba.slidercrank);
+                            name_rgba_row(ui, "Crank broken", &mut vis.rgba.crankbroken);
+                            name_rgba_row(ui, "Frustum", &mut vis.rgba.frustum);
+                            name_rgba_row(ui, "BV", &mut vis.rgba.bv);
+                            name_rgba_row(ui, "BV active", &mut vis.rgba.bvactive);
                         });
                     });
 
@@ -1927,11 +1804,6 @@ impl<'t, Num: egui::emath::Numeric> RowArray<'t, Num> {
     fn new(name: impl Into<egui::WidgetText>, values: &'t mut [Num], increment: f64) -> Self {
         Self { name: name.into(), values, increment, maybe_range: None }
     }
-
-    fn range(mut self, range: std::ops::RangeInclusive<Num>) -> Self {
-        self.maybe_range = Some(range);
-        self
-    }
 }
 
 impl<'t, Num: egui::emath::Numeric> egui::Widget for RowArray<'t, Num> {
@@ -1965,4 +1837,11 @@ impl<'t, Num: egui::emath::Numeric> egui::Widget for RowArray<'t, Num> {
 
         response.response
     }
+}
+
+/// Adds a grid row with a label and an RGBA color picker.
+fn name_rgba_row(ui: &mut egui::Ui, name: &str, rgba: &mut [f32; 4]) {
+    ui.label(name);
+    egui::color_picker::color_edit_button_rgba(ui, bytemuck::must_cast_mut(rgba), Alpha::OnlyBlend);
+    ui.end_row();
 }
