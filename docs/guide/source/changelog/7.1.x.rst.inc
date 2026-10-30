@@ -19,8 +19,11 @@
 
 *Viewer UI*
 
-- The RGBA section of the :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` UI now uses color pickers
-  instead of numeric fields, so colors can be chosen visually.
+- The RGBA section and the headlight colors of the :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`
+  UI now use color pickers instead of numeric fields, so colors can be chosen visually.
+- The contact override "Sol Imp" and "Friction" fields and the free camera elevation now accept
+  only the values that MuJoCo applies.
+- The joint window now shows the unit of each value.
 
 .. rubric:: New examples
 
