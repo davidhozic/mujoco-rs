@@ -41,7 +41,7 @@ use std::fmt;
 use bytemuck::Pod;
 
 use crate::mujoco_c::{
-    mjBatch, mjBatchConfig, mjBatchRecord, mj_stateSize, mjb_defaultConfig, mjb_deleteBatch,
+    mjBatch, mjBatchConfig, mjBatchRecord, mjModel, mj_stateSize, mjb_defaultConfig, mjb_deleteBatch,
     mjb_error, mjb_expand, mjb_expanded, mjb_forward, mjb_getData, mjb_getModel, mjb_model,
     mjb_makeBatch, mjb_nstate, mjb_nthread, mjb_output, mjb_persistent, mjb_reset, mjb_rollout,
     mjb_setConst, mjb_state, mjb_status, mjb_step, mjb_warning
@@ -98,7 +98,11 @@ impl<'b> MjBatchRecord<'b> {
     /// Returns a reference to the FFI type [`mjBatchRecord`].
     pub fn ffi(&self) -> &mjBatchRecord { &self.inner }
     /// Returns a mutable reference to the FFI type [`mjBatchRecord`].
-    pub fn ffi_mut(&mut self) -> &mut mjBatchRecord { &mut self.inner }
+    ///
+    /// # Safety
+    /// Do not use this mutable reference to replace FFI data, unless attributes
+    /// [`field`](mjBatchRecord::field) (currently always null) and [`buf`](mjBatchRecord::buf) remain equal.
+    pub unsafe fn ffi_mut(&mut self) -> &mut mjBatchRecord { &mut self.inner }
 }
 
 impl fmt::Debug for MjBatchRecord<'_> {
@@ -415,7 +419,12 @@ impl MjBatch {
     pub fn get_model(&self, index: usize, model: &mut MjModel) -> Result<(), MjBatchError> {
         assert!(index < self.num_sim, "simulation index {index} is out of range [0, {})", self.num_sim);
 
-        if self.layout != *model.layout() {
+        // SAFETY: the batch's model is valid while this MjBatch exists.
+        let (source, destination) = (unsafe { &*mjb_model(self.handle.as_ptr()) }, model.ffi());
+        // The layout does not include these extra size fields. However, MuJoCo's batching API does
+        // compare them and stops the process when they are not equal in value.
+        let sizes = |m: &mjModel| [m.nnames, m.npaths, m.noct, m.ngravcomp, m.nbuffer];
+        if self.layout != *model.layout() || sizes(source) != sizes(destination) {
             return Err(MjBatchError::IncompatibleModel {
                 source: Arc::clone(&self.layout),
                 destination: Arc::clone(model.layout()),
