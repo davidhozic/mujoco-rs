@@ -32,6 +32,9 @@ jobs:
       - name: Generate Cargo.lock
         run: cargo generate-lockfile
 
+      - name: Prepare submodules
+        run: git submodule update --init --force
+
       - name: Prepare features string
         run: |
           echo "MJRS_FEATURES=\"${{join(matrix.features, ' ')}}\"" >> $GITHUB_ENV
