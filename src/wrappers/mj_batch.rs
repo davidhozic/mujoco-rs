@@ -44,7 +44,7 @@ use crate::mujoco_c::{
     mjBatch, mjBatchConfig, mjBatchRecord, mj_stateSize, mjb_defaultConfig, mjb_deleteBatch,
     mjb_error, mjb_expand, mjb_expanded, mjb_forward, mjb_getData, mjb_getModel, mjb_model,
     mjb_makeBatch, mjb_nstate, mjb_nthread, mjb_output, mjb_persistent, mjb_reset, mjb_rollout,
-    mjb_state, mjb_status, mjb_step, mjb_warning
+    mjb_setConst, mjb_state, mjb_status, mjb_step, mjb_warning
 };
 use crate::wrappers::mj_model::{MjModel, MjModelLayout, MjtStage};
 use crate::util::{ERROR_BUF_LEN, checked_c_len, string_from_c};
@@ -695,6 +695,29 @@ impl MjBatch {
             return Err(MjBatchError::FieldTypeMismatch { name: name.to_owned(), element_size });
         }
         Ok((ptr, self.num_sim * len))
+    }
+
+    /// Apply [`MjData::set_const`] to each selected simulation instance inside the batch, on its
+    /// own [`MjModel`] values. Giving `maybe_ids` [`None`] selects all simulations.
+    /// Read the constants that changed between simulations with [`expanded`](MjBatch::expanded).
+    /// Wraps [`mjb_setConst`].
+    ///
+    /// # Returns
+    /// Number of simulations in which MuJoCo raised an error.
+    ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process if `ids` inside `maybe_ids` is not sorted and
+    /// unique, or if it holds an id not less than [`num_sim`](MjBatch::num_sim).
+    ///
+    /// # Panics
+    /// Panics if `ids.len()` exceeds [`i32::MAX`].
+    pub fn set_const(&mut self, maybe_ids: Option<&[u32]>) -> u32 {
+        // SAFETY: handle is always valid here, ids have checked length, u32 has the same layout
+        //         as i32. The batch never runs on caller models, on which MuJoCo aborts.
+        unsafe { mjb_setConst(
+            self.handle.as_ptr(), maybe_ids.map_or(ptr::null(), |ids| ids.as_ptr().cast()),
+            maybe_ids.map_or(0, |ids| checked_c_len(ids.len()))
+        ) as u32 }
     }
 }
 
