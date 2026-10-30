@@ -843,7 +843,6 @@ macro_rules! getter_setter {
 #[doc(hidden)]
 #[macro_export]
 /// Constructs builder methods.
-/// Before assignment, an optional check, inside a `{ ... }` block, is run to validate the parameter.
 macro_rules! builder_setters {
     ($($name:ident: $type:ty $(where $generic_type:ident: $generic:path)?; $comment:expr);* $(;)?) => {
         $(
