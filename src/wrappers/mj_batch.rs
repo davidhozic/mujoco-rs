@@ -130,7 +130,8 @@ impl MjBatch {
     /// Wraps [`mjb_makeBatch`].
     ///
     /// # Panics
-    /// Panics if MuJoCo cannot create the batch (e.g. `num_sim` is 0, or the allocation fails).
+    /// Panics if MuJoCo cannot create the batch (e.g. `num_sim` is 0, or the allocation fails),
+    /// or if `num_sim` exceeds [`i32::MAX`].
     pub fn new(model: &MjModel, num_sim: usize, config: Option<MjBatchConfig>) -> Self {
         Self::try_new(model, num_sim, config).unwrap()
     }
@@ -140,6 +141,9 @@ impl MjBatch {
     /// # Errors
     /// Returns [`MjBatchError::MakeFailed`] when MuJoCo cannot create the batch (e.g. `num_sim`
     /// is 0, or the allocation fails).
+    ///
+    /// # Panics
+    /// Panics if `num_sim` exceeds [`i32::MAX`].
     pub fn try_new(model: &MjModel, num_sim: usize, config: Option<MjBatchConfig>) -> Result<Self, MjBatchError> {
         let mut error = [0; ERROR_BUF_LEN];
 
@@ -613,7 +617,7 @@ impl MjBatch {
         // SAFETY: handle is always valid while MjBatch is alive and `c_string` is NUL-terminated.
         let ptr = unsafe { mjb_output(
             self.handle.as_ptr(), c_string.as_ptr(),
-            &raw mut len, &raw mut element_size
+            &mut len, &mut element_size
         ) };
 
         // Null for an unknown name and for a state field.

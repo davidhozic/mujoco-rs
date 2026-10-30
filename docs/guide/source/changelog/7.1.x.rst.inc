@@ -20,3 +20,9 @@
 
 - :gh-example:`Batched simulation <simulation/batched.rs>` --- runs many simulations in parallel
   using :docs-rs:`~mujoco_rs::wrappers::mj_batch::<struct>MjBatch`.
+
+.. rubric:: Other changes
+
+- The crates now point to the ``LICENSE`` file instead of the ``MIT OR Apache-2.0`` SPDX
+  expression. The file adds a reservation of rights for text and data mining and machine learning
+  on top of the MIT or Apache license. Read it before you use the crates.
