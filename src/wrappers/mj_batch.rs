@@ -238,6 +238,7 @@ impl MjBatch {
     /// # Panics
     /// Panics if `index` is not less than [`num_sim`](MjBatch::num_sim).
     pub fn state_at(&self, index: usize) -> &[MjtNum] {
+        assert!(index < self.num_sim, "simulation index {index} is out of range [0, {})", self.num_sim);
         let state_size = self.state_size();
         &self.state_flattened()[index * state_size..][..state_size]
     }
@@ -251,6 +252,7 @@ impl MjBatch {
     /// # Panics
     /// Panics if `index` is not less than [`num_sim`](MjBatch::num_sim).
     pub unsafe fn state_at_mut(&mut self, index: usize) -> &mut [MjtNum] {
+        assert!(index < self.num_sim, "simulation index {index} is out of range [0, {})", self.num_sim);
         let state_size = self.state_size();
         // SAFETY: the caller upholds the contract of `state_flattened_mut`.
         let states = unsafe { self.state_flattened_mut() };
