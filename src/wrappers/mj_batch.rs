@@ -53,7 +53,6 @@ use crate::mujoco_c::mjtWarning::mjNWARNING;
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::traits::ModelType;
 use crate::error::MjBatchError;
-use crate::builder_setters;
 
 /// The threading configuration of a batch.
 pub type MjBatchConfig = mjBatchConfig;
