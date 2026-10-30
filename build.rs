@@ -110,6 +110,7 @@ mod build_dependencies {
         // Generate bindings
         let bindings_mujoco = bindgen::Builder::default()
             .header(include_dir_mujoco.join("mujoco.h").to_str().unwrap())
+            .header(include_dir_mujoco.join("mjbatch.h").to_str().unwrap())
             .clang_arg(format!("-I{}", include_dir_mujoco.display()))
             .clang_arg(format!("-I{}", include_dir_mujoco.parent().unwrap().display()))
             .allowlist_item("mj.*")

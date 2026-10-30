@@ -10,9 +10,9 @@ MuJoCo-rs
 .. image:: https://img.shields.io/crates/v/mujoco-rs.svg
     :target: https://crates.io/crates/mujoco-rs
 
-.. image:: https://img.shields.io/badge/license-MIT%20or%20Apache--2.0-blue?logo=github
-   :target: https://github.com/davidhozic/mujoco-rs
-   :alt: License: MIT OR Apache-2.0
+.. image:: https://img.shields.io/badge/license-MIT%20or%20Apache--2.0%20with%20reservation-blue?logo=github
+   :target: https://github.com/davidhozic/mujoco-rs/blob/main/LICENSE
+   :alt: License: MIT OR Apache-2.0, with a reservation of rights
 
 
 MuJoCo bindings and wrappers for the Rust programming language.
