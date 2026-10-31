@@ -11,6 +11,10 @@
 //! Open the "Joint" window in the viewer. Each slider writes one position component of the
 //! joint, and a free joint takes a numeric input for each component. A limited ball joint also
 //! shows its rotation angle against the limit.
+//!
+//! Open the "Sensor" window in the viewer. Each sensor shows one value for each of its
+//! components, labelled with the axis or the quaternion component and the unit of the quantity.
+//! The free box carries a touch sensor, an accelerometer and a gyro on its site.
 use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;
@@ -75,6 +79,7 @@ const EXAMPLE_MODEL: &str = stringify! {
     <body name="free_box" pos="3.3 0 .4">
       <freejoint name="free"/>
       <geom type="box" size=".06 .06 .06" rgba=".8 .8 .4 1"/>
+      <site name="free_site" type="box" size=".065 .065 .065" rgba="0 0 0 0"/>
     </body>
   </worldbody>
 
@@ -92,6 +97,26 @@ const EXAMPLE_MODEL: &str = stringify! {
     <orientation name="orientation_expmap" joint="expmap_ball" kp="3" dampratio="1" ctrlrange="-3.1416 3.1416"/>
     <orientation name="orientation_quat" joint="quat_ball" input="quat" kp="3" dampratio="1" ctrlrange="-1 1"/>
   </actuator>
+
+  <sensor>
+    <jointpos name="slide_pos" joint="slide"/>
+    <jointvel name="slide_vel" joint="slide"/>
+    <jointlimitpos name="slide_limit_pos" joint="slide"/>
+    <jointpos name="pid_hinge_pos" joint="pid_hinge"/>
+    <jointactuatorfrc name="pid_hinge_actfrc" joint="pid_hinge"/>
+    <actuatorfrc name="dcmotor_frc" actuator="dcmotor_all"/>
+    <actuatorfrc name="orientation_quat_frc" actuator="orientation_quat"/>
+    <ballquat name="quat_ball_quat" joint="quat_ball"/>
+    <ballangvel name="quat_ball_angvel" joint="quat_ball"/>
+    <jointlimitpos name="limited_ball_limit_pos" joint="limited_ball"/>
+    <framepos name="free_pos" objtype="body" objname="free_box"/>
+    <framequat name="free_quat" objtype="body" objname="free_box"/>
+    <framezaxis name="free_zaxis" objtype="body" objname="free_box"/>
+    <touch name="free_touch" site="free_site"/>
+    <accelerometer name="free_acc" site="free_site"/>
+    <gyro name="free_gyro" site="free_site"/>
+    <clock/>
+  </sensor>
 </mujoco>
 };
 

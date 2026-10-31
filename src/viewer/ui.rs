@@ -16,17 +16,18 @@ use egui_winit::egui;
 use egui_winit;
 use log::info;
 
-use crate::wrappers::mj_model::{MjModel, MjtObjBase, MjtJoint, MjtDisableBit, MjtEnableBit};
+use crate::wrappers::mj_model::{MjModel, MjtObjBase, MjtJoint, MjtDisableBit, MjtEnableBit, MjtWrap};
 use crate::wrappers::mj_visualization::{MjvOption, MjvCamera, MjtCamera, MjvScene};
-use crate::wrappers::fun::{mju_normalize_3, mju_normalize_4, mju_quat_2_vel};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
 use crate::mujoco_c::{mjNGROUP, mjMINIMP, mjMAXIMP, mjMINMU};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::{cast_mut_info, set_flag};
+use crate::wrappers::MjtSensor;
 use crate::util::LockUnpoison;
 
 /* UI Fonts */
 const MAIN_FONT: FontId = FontId::proportional(15.0);
+const PROGRESS_BAR_FONT: FontId = FontId::proportional(12.0);
 const HEADING_FONT: FontId = FontId::proportional(20.0);
 
 /* UI Spacing and Dimensions */
@@ -37,7 +38,8 @@ const BUTTON_ROUNDING: f32 = 50.0;
 const TOGGLE_LABEL_HEIGHT_EXTRA_SPACE: f32 = 20.0;
 const SIDE_PANEL_PAD: f32 = 10.0;
 const MAX_SPAN_WIDTH: f32 = 350.0;
-const JOINT_ANGLE_BAR_WIDTH: f32 = 120.0;
+const INSPECTOR_GRID_SPACING_X: f32 = 6.0;
+const INSPECTOR_GRID_SPACING_Y: f32 = 10.0;
 
 /* Precision and Tolerances */
 const RANGE_PRECISION_TOLERANCE: f32 = 1e-4;
@@ -212,10 +214,16 @@ const ENABLE_FLAGS: &[(&str, MjtEnableBit)] = &[
 const _: () = assert!(ENABLE_FLAGS.len() == crate::mujoco_c::mjtEnableBit::mjNENABLE as usize);
 
 /// Names of the translation components of a free joint, in `qpos` order.
-const FREE_JOINT_TRANSLATION_COMPONENTS: [&str; 3] = ["x", "y", "z"];
+const XYZ_COMPONENTS: [&str; 3] = ["x", "y", "z"];
 
 /// Names of the components of a joint quaternion, in `qpos` order.
-const JOINT_QUAT_COMPONENTS: [&str; 4] = ["qw", "qx", "qy", "qz"];
+const QUAT_COMPONENTS: [&str; 4] = ["qw", "qx", "qy", "qz"];
+
+/// Names of the components of a `geomfromto` sensor, in `sensordata` order.
+const SENSOR_FROMTO_COMPONENTS: [&str; 6] = ["x1", "y1", "z1", "x2", "y2", "z2"];
+
+/// Names of the components of a `camprojection` sensor, in `sensordata` order.
+const SENSOR_CAMPROJECTION_COMPONENTS: [&str; 2] = ["u", "v"];
 
 /// Value change per point of pointer travel in the numeric input of a joint component.
 const JOINT_INPUT_DRAG_SPEED: f64 = 0.01;
@@ -242,23 +250,16 @@ struct ActuatorDisplayInfo {
     inputs: Box<[ActuatorInputDisplayInfo]>,
 }
 
-/// Cached display information about one position component (one `qpos` entry) of a joint.
-struct JointComponentDisplayInfo {
-    /// Name of the component. [`None`] when the joint holds one component, which needs no label.
+/// Cached display information about one component of a joint position (one `qpos` entry) or of a
+/// sensor value (one `sensordata` entry).
+struct ComponentDisplayInfo {
+    /// Name of the component. [`None`] when the owner holds one component, which needs no label.
     label: Option<&'static str>,
-    /// Range of the slider of the component, or [`None`] when the component has no natural range
-    /// and takes a numeric input instead.
+    /// Range of the slider (joint) or the progress bar (sensor) of the component, or [`None`] when
+    /// the component has no natural range and shows a plain value instead.
     range: Option<RangeInclusive<MjtNum>>,
     /// Unit suffix of the value.
     unit: &'static str,
-}
-
-/// Cached display information about the position components of a joint that form a quaternion.
-struct JointQuatDisplayInfo {
-    /// Offset of the quaternion inside the position block of the joint.
-    offset: usize,
-    /// Maximum rotation angle in radians, or [`None`] when the joint has no limit.
-    angle_limit: Option<MjtNum>,
 }
 
 /// Cached display information about one joint.
@@ -268,9 +269,18 @@ struct JointDisplayInfo {
     /// Address of the first position component of the joint inside `qpos`.
     qpos_start: usize,
     /// Display information of each position component of the joint, in `qpos` order.
-    components: Box<[JointComponentDisplayInfo]>,
-    /// The quaternion of a ball or a free joint, [`None`] for a slide or a hinge joint.
-    quat: Option<JointQuatDisplayInfo>,
+    components: Box<[ComponentDisplayInfo]>,
+}
+
+/// Cached display information about one sensor.
+struct SensorDisplayInfo {
+    /// Name of the sensor. Auto-generated to be 'Sensor <0->' when not named.
+    name: String,
+    /// The first index of this sensor's data inside the
+    /// [`sensordata`](crate::wrappers::mj_data::MjData::sensordata) array.
+    data_start: usize,
+    /// Display information for each sensor's data component.
+    components: Box<[ComponentDisplayInfo]>,
 }
 
 /// Processed egui data to be painted.
@@ -292,6 +302,7 @@ pub(crate) struct ViewerUI {
     camera_names: Vec<String>,
     actuator_info: Vec<ActuatorDisplayInfo>,
     joint_info: Vec<JointDisplayInfo>,
+    sensor_info: Vec<SensorDisplayInfo>,
     equality_names: Vec<String>,
     user_ui_callbacks: Vec<UiCallback>,
 
@@ -304,6 +315,7 @@ pub(crate) struct ViewerUI {
     joint_window: bool,
     equality_window: bool,
     group_window: bool,
+    sensor_window: bool,
     screenshot_viewport_only: bool,
     screenshot_depth: bool,
 
@@ -336,12 +348,14 @@ impl ViewerUI {
             camera_names: Vec::new(),
             actuator_info: Vec::new(),
             joint_info: Vec::new(),
+            sensor_info: Vec::new(),
             equality_names: Vec::new(),
             user_ui_callbacks: Vec::new(),
             actuator_window: false,
             joint_window: false,
             equality_window: false,
             group_window: false,
+            sensor_window: false,
             screenshot_viewport_only: false,
             screenshot_depth: false,
             show_tracking_modal: false,
@@ -397,34 +411,24 @@ impl ViewerUI {
             let qpos_start = model.jnt_qposadr()[idx_joint] as usize;
             let limits = model.jnt_range()[idx_joint];
 
-            // The limit of a ball joint applies to the rotation angle, and MuJoCo takes the
-            // maximum of the range as that limit. A zero limit carries no scale for the bar.
-            let angle_limit = model.jnt_limited()[idx_joint]
-                .then(|| limits[0].max(limits[1]))
-                .filter(|limit| *limit > 0.0);
-
-            let (components, quat) = match model.jnt_type()[idx_joint] {
+            let components = match model.jnt_type()[idx_joint] {
                 // A free joint holds no limit and no natural range, so each of its components
                 // takes a numeric input.
                 MjtJoint::mjJNT_FREE => {
-                    let translation = FREE_JOINT_TRANSLATION_COMPONENTS.map(|label| {
-                        JointComponentDisplayInfo { label: Some(label), range: None, unit: " m" }
+                    let translation = XYZ_COMPONENTS.map(|label| {
+                        ComponentDisplayInfo { label: Some(label), range: None, unit: " m" }
                     });
-                    let rotation = JOINT_QUAT_COMPONENTS.map(|label| {
-                        JointComponentDisplayInfo { label: Some(label), range: None, unit: "" }
+                    let rotation = QUAT_COMPONENTS.map(|label| {
+                        ComponentDisplayInfo { label: Some(label), range: Some(-1.0..=1.0), unit: "" }
                     });
-                    let components = translation.into_iter().chain(rotation).collect();
-
-                    (components, Some(JointQuatDisplayInfo { offset: 3, angle_limit }))
+                    translation.into_iter().chain(rotation).collect()
                 }
 
                 // A quaternion component always lies inside the unit sphere.
                 MjtJoint::mjJNT_BALL => {
-                    let components = JOINT_QUAT_COMPONENTS.map(|label| {
-                        JointComponentDisplayInfo { label: Some(label), range: Some(-1.0..=1.0), unit: "" }
-                    });
-
-                    (components.into(), Some(JointQuatDisplayInfo { offset: 0, angle_limit }))
+                    QUAT_COMPONENTS.map(|label| {
+                        ComponentDisplayInfo { label: Some(label), range: Some(-1.0..=1.0), unit: "" }
+                    }).into()
                 }
 
                 // A slide or a hinge joint holds one position component, which the limit applies
@@ -437,11 +441,117 @@ impl ViewerUI {
                         -1.0..=1.0
                     } else { -PI..=PI };
                     let unit = if is_slide { " m" } else { " rad" };
-                    ([JointComponentDisplayInfo { label: None, range: Some(range), unit }].into(), None)
+                    [ComponentDisplayInfo { label: None, range: Some(range), unit }].into()
                 }
             };
 
-            JointDisplayInfo { name, qpos_start, components, quat }
+            JointDisplayInfo { name, qpos_start, components }
+        }).collect();
+
+        self.sensor_info = (0..model.nsensor() as usize).map(|index| {
+            let name = model.id_to_name(MjtObjBase::mjOBJ_SENSOR, index)
+                .map(|name| name.to_string())
+                .unwrap_or_else(|| format!("Sensor {index}"));
+
+            let data_start = model.sensor_adr()[index] as usize;
+
+            let sensor_type = model.sensor_type()[index];
+            let sensor_dim = model.sensor_dim()[index] as usize;
+
+            // A joint sensor measures a length on a slide joint and an angle on a hinge or ball joint.
+            let objid = model.sensor_objid()[index] as usize;
+            let objtype = model.sensor_objtype()[index];
+            let is_slide = objtype == MjtObjBase::mjOBJ_JOINT && model.jnt_type()[objid] == MjtJoint::mjJNT_SLIDE;
+            // A fixed tendon combines joint coordinates, so its unit depends on the joints and coefficients.
+            let is_spatial_tendon = objtype == MjtObjBase::mjOBJ_TENDON
+                && model.wrap_type()[model.tendon_adr()[objid] as usize] != MjtWrap::mjWRAP_JOINT;
+
+            let labelled = |labels: &[&'static str], range: Option<RangeInclusive<MjtNum>>, unit| {
+                labels.iter().map(|&label| {
+                    ComponentDisplayInfo { label: Some(label), range: range.clone(), unit }
+                }).collect::<Box<[_]>>()
+            };
+            let scalar = |unit| -> Box<[_]> {
+                Box::new([ComponentDisplayInfo { label: None, range: None, unit }])
+            };
+            let xyz = |unit| labelled(&XYZ_COMPONENTS, None, unit);
+            let unit_xyz = || labelled(&XYZ_COMPONENTS, Some(-1.0..=1.0), "");
+
+            let components = match sensor_type {
+                MjtSensor::mjSENS_TOUCH => scalar(" N"),
+                MjtSensor::mjSENS_ACCELEROMETER => xyz(" m/s^2"),
+                MjtSensor::mjSENS_VELOCIMETER => xyz(" m/s"),
+                MjtSensor::mjSENS_GYRO => xyz(" rad/s"),
+                MjtSensor::mjSENS_FORCE => xyz(" N"),
+                MjtSensor::mjSENS_TORQUE => xyz(" N m"),
+                // The unit is the unit of the magnetic option.
+                MjtSensor::mjSENS_MAGNETOMETER => xyz(""),
+                MjtSensor::mjSENS_CAMPROJECTION => labelled(&SENSOR_CAMPROJECTION_COMPONENTS, None, " px"),
+
+                MjtSensor::mjSENS_JOINTPOS | MjtSensor::mjSENS_JOINTLIMITPOS => {
+                    scalar(if is_slide { " m" } else { " rad" })
+                }
+                MjtSensor::mjSENS_JOINTVEL | MjtSensor::mjSENS_JOINTLIMITVEL => {
+                    scalar(if is_slide { " m/s" } else { " rad/s" })
+                }
+                MjtSensor::mjSENS_JOINTACTFRC | MjtSensor::mjSENS_JOINTLIMITFRC => {
+                    scalar(if is_slide { " N" } else { " N m" })
+                }
+
+                MjtSensor::mjSENS_TENDONPOS | MjtSensor::mjSENS_TENDONLIMITPOS => {
+                    scalar(if is_spatial_tendon { " m" } else { "" })
+                }
+                MjtSensor::mjSENS_TENDONVEL | MjtSensor::mjSENS_TENDONLIMITVEL => {
+                    scalar(if is_spatial_tendon { " m/s" } else { "" })
+                }
+                MjtSensor::mjSENS_TENDONACTFRC | MjtSensor::mjSENS_TENDONLIMITFRC => {
+                    scalar(if is_spatial_tendon { " N" } else { "" })
+                }
+
+                // The unit of an actuator quantity depends on its transmission and gain. The sensor
+                // has one value per actuator output; an orientation actuator has one output per axis.
+                MjtSensor::mjSENS_ACTUATORPOS
+                | MjtSensor::mjSENS_ACTUATORVEL
+                | MjtSensor::mjSENS_ACTUATORFRC => if sensor_dim == 3 { xyz("") } else { scalar("") },
+
+                MjtSensor::mjSENS_BALLQUAT | MjtSensor::mjSENS_FRAMEQUAT => {
+                    labelled(&QUAT_COMPONENTS, Some(-1.0..=1.0), "")
+                }
+                MjtSensor::mjSENS_BALLANGVEL => xyz(" rad/s"),
+
+                MjtSensor::mjSENS_FRAMEPOS | MjtSensor::mjSENS_SUBTREECOM => xyz(" m"),
+                MjtSensor::mjSENS_FRAMEXAXIS
+                | MjtSensor::mjSENS_FRAMEYAXIS
+                | MjtSensor::mjSENS_FRAMEZAXIS
+                | MjtSensor::mjSENS_GEOMNORMAL => unit_xyz(),
+                MjtSensor::mjSENS_FRAMELINVEL | MjtSensor::mjSENS_SUBTREELINVEL => xyz(" m/s"),
+                MjtSensor::mjSENS_FRAMEANGVEL => xyz(" rad/s"),
+                MjtSensor::mjSENS_FRAMELINACC => xyz(" m/s^2"),
+                MjtSensor::mjSENS_FRAMEANGACC => xyz(" rad/s^2"),
+                MjtSensor::mjSENS_SUBTREEANGMOM => xyz(" kg m^2/s"),
+
+                // An "enclosed" sensor gives a signed distance to the site boundary.
+                MjtSensor::mjSENS_INSIDESITE if model.sensor_intprm()[index][0] != 0 => scalar(" m"),
+                MjtSensor::mjSENS_INSIDESITE => {
+                    Box::new([ComponentDisplayInfo { label: None, range: Some(0.0..=1.0), unit: "" }])
+                }
+                MjtSensor::mjSENS_GEOMDIST => scalar(" m"),
+                MjtSensor::mjSENS_GEOMFROMTO => labelled(&SENSOR_FROMTO_COMPONENTS, None, " m"),
+                MjtSensor::mjSENS_E_POTENTIAL | MjtSensor::mjSENS_E_KINETIC => scalar(" J"),
+                MjtSensor::mjSENS_CLOCK => scalar(" s"),
+
+                // Attribute-dependent dimensions
+                MjtSensor::mjSENS_RANGEFINDER
+                | MjtSensor::mjSENS_CONTACT
+                | MjtSensor::mjSENS_TACTILE
+                | MjtSensor::mjSENS_USER
+                | MjtSensor::mjSENS_PLUGIN => {
+                    (0..sensor_dim).map(|_| ComponentDisplayInfo { label: None, range: None, unit: "" }).collect()
+                }
+            };
+
+            debug_assert_eq!(components.len(), sensor_dim, "unexpected dimension of sensor type {sensor_type:?}");
+            SensorDisplayInfo { name, data_start, components }
         }).collect();
 
         self.equality_names = (0..model.neq()).map(|i| {
@@ -552,6 +662,7 @@ impl ViewerUI {
                             ui.toggle_value(&mut self.joint_window, RichText::new("Joint").font(MAIN_FONT));
                             ui.toggle_value(&mut self.equality_window, RichText::new("Equality").font(MAIN_FONT));
                             ui.toggle_value(&mut self.group_window, RichText::new("Group").font(MAIN_FONT));
+                            ui.toggle_value(&mut self.sensor_window, RichText::new("Sensor").font(MAIN_FONT));
                         });
 
                         ui.separator();
@@ -1187,7 +1298,11 @@ impl ViewerUI {
                             return;
                         }
 
-                        ui.horizontal(|ui| {
+                        egui::Grid::new("actuator_ctrl_ui_grid")
+                            .spacing(egui::vec2(INSPECTOR_GRID_SPACING_X, INSPECTOR_GRID_SPACING_Y))
+                            .min_col_width(0.0)
+                            .show(ui, |ui|
+                        {
                             for (input, ctrl) in inputs.iter().zip(actuator_ctrl) {
                                 if let Some(label) = &input.label {
                                     ui.label(RichText::new(&**label).font(MAIN_FONT));
@@ -1197,7 +1312,9 @@ impl ViewerUI {
                                     .clamping(egui::SliderClamping::Never)
                                     .update_while_editing(false)
                                 );
+                                ui.add(egui::Separator::default().vertical());
                             }
+                            ui.end_row();
                         });
                     });
                 }
@@ -1220,11 +1337,15 @@ impl ViewerUI {
                     return;
                 }
                 let qpos = lock.data_passive.qpos_mut();
-                for JointDisplayInfo { name, qpos_start, components, quat } in &self.joint_info {
+                for JointDisplayInfo { name, qpos_start, components } in &self.joint_info {
                     let joint_qpos = &mut qpos[*qpos_start..*qpos_start + components.len()];
                     ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
                         let mut edited = false;
-                        ui.horizontal(|ui| {
+                        egui::Grid::new("joint_qpos_ui_grid")
+                            .spacing(egui::vec2(INSPECTOR_GRID_SPACING_X, INSPECTOR_GRID_SPACING_Y))
+                            .min_col_width(0.0)
+                            .show(ui, |ui|
+                        {
                             for (component, value) in components.iter().zip(joint_qpos.iter_mut()) {
                                 if let Some(label) = component.label {
                                     ui.label(RichText::new(label).font(MAIN_FONT));
@@ -1247,37 +1368,63 @@ impl ViewerUI {
                                         .suffix(component.unit)
                                     )
                                 }.changed();
+                                ui.add(egui::Separator::default().vertical());
                             }
+                            ui.end_row();
                         });
+                    });
+                }
+            });
 
-                        // Only a ball or a free joint holds a quaternion.
-                        if let Some(JointQuatDisplayInfo { offset, angle_limit }) = quat
-                            && let Some(joint_quat) = joint_qpos[*offset..].first_chunk_mut::<4>()
+            // Sensors window
+            egui::Window::new("Sensor")
+                .open(&mut self.sensor_window)
+                .scroll(true)
+                .drag_to_scroll(egui::scroll_area::DragScroll::Always)
+                .show(ui, |ui|
+            {
+                let mut lock = shared_viewer_state.lock_unpoison();
+                if lock.model_reloaded {
+                    return;
+                }
+
+                let sensordata = lock.data_passive.sensordata_mut();
+                for SensorDisplayInfo { name, data_start, components } in &self.sensor_info {
+                    let sensor_data = &mut sensordata[*data_start..*data_start + components.len()];
+                    ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
+                        egui::Grid::new("sensor_data_ui_grid")
+                            .spacing(egui::vec2(INSPECTOR_GRID_SPACING_X, INSPECTOR_GRID_SPACING_Y))
+                            .min_col_width(0.0)
+                            .show(ui, |ui|
                         {
-                            // A slider moves one component alone, which takes the quaternion off
-                            // the unit sphere.
-                            if edited {
-                                mju_normalize_4(joint_quat);
-                            }
+                            for (component, value) in components.iter().zip(sensor_data.iter()) {
+                                if let Some(label) = component.label {
+                                    ui.label(RichText::new(label).font(MAIN_FONT));
+                                }
 
-                            // The limit of a ball joint applies to the rotation angle, so the
-                            // angle needs a row of its own.
-                            if let Some(limit) = angle_limit {
-                                let mut angle_axis = [0.0; 3];
-                                mju_quat_2_vel(&mut angle_axis, joint_quat, 1.0);
-                                let angle = mju_normalize_3(&mut angle_axis);
+                                match &component.range {
+                                    Some(range) => {
+                                        let response = ui.add(
+                                            egui::ProgressBar::new(((*value - range.start()) / (range.end() - range.start())) as f32)
+                                            .desired_width(100.0)
+                                        );
+                                        ui.painter().text(
+                                            response.rect.center(), egui::Align2::CENTER_CENTER,
+                                            format!("{value:.3}{}", component.unit),
+                                            PROGRESS_BAR_FONT, egui::Color32::GRAY
+                                        );
+                                    }
 
-                                ui.horizontal(|ui| {
-                                    ui.label(RichText::new("angle").font(MAIN_FONT));
-                                    let angle_scaled = (angle / limit).clamp(0.0, 1.0);
-                                    ui.add(
-                                        egui::ProgressBar::new(angle_scaled as f32)
-                                        .text(format!("{angle:.3} rad"))
-                                        .desired_width(JOINT_ANGLE_BAR_WIDTH)
-                                    );
-                                });
+                                    None => {
+                                        egui::Frame::canvas(ui.style()).show(ui, |ui| {
+                                            ui.label(format!("{value:.3}{}", component.unit));
+                                        });
+                                    }
+                                }
+                                ui.add(egui::Separator::default().vertical());
                             }
-                        }
+                            ui.end_row();
+                        });
                     });
                 }
             });
