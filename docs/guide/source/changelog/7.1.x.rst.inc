@@ -23,7 +23,7 @@
   UI now use color pickers instead of numeric fields, so colors can be chosen visually.
 - The contact override "Sol Imp" and "Friction" fields and the free camera elevation now accept
   only the values that MuJoCo applies.
-- The joint window now shows the unit of each value.
+- The joint and actuator windows now show the unit of each value, when MuJoCo defines one.
 - Added a sensor window that shows the value of each sensor component with its unit. A value with
   a natural range (for example a quaternion component) also shows a bar.
 - The joint and actuator windows now align their values in a grid with separators, as the sensor

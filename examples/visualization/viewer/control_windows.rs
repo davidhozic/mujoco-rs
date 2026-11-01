@@ -21,7 +21,7 @@ use env_logger::Env;
 
 
 const EXAMPLE_MODEL: &str = stringify! {
-<mujoco model="actuator_inputs">
+<mujoco model="control_windows">
   <option integrator="implicitfast"/>
   <statistic center=".25 0 .3" extent="4"/>
 

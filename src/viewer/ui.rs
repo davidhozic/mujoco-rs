@@ -16,7 +16,10 @@ use egui::color_picker::Alpha;
 use egui_winit::egui;
 use log::info;
 
-use crate::wrappers::mj_model::{MjModel, MjtObjBase, MjtJoint, MjtDisableBit, MjtEnableBit, MjtWrap, MjtTrn, MjtDyn, MjtGain, MjtBias};
+use crate::wrappers::mj_model::{
+    MjModel, MjtObjBase, MjtJoint, MjtDisableBit, MjtEnableBit, MjtWrap, MjtTrn, MjtDyn, MjtGain,
+    MjtBias, MjtRayDataField
+};
 use crate::wrappers::mj_visualization::{MjvOption, MjvCamera, MjtCamera, MjvScene};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
 use crate::mujoco_c::{mjNGROUP, mjMINIMP, mjMAXIMP, mjMINMU};
@@ -217,10 +220,10 @@ const ENABLE_FLAGS: &[(&str, MjtEnableBit)] = &[
 ];
 const _: () = assert!(ENABLE_FLAGS.len() == crate::mujoco_c::mjtEnableBit::mjNENABLE as usize);
 
-/// Names of the translation components of a free joint, in `qpos` order.
+/// Names of the components of a 3D vector, in `qpos` or `sensordata` order.
 const XYZ_COMPONENTS: [&str; 3] = ["x", "y", "z"];
 
-/// Names of the components of a joint quaternion, in `qpos` order.
+/// Names of the components of a quaternion, in `qpos` or `sensordata` order.
 const QUAT_COMPONENTS: [&str; 4] = ["qw", "qx", "qy", "qz"];
 
 /// Names of the components of a `geomfromto` sensor, in `sensordata` order.
@@ -228,6 +231,12 @@ const SENSOR_FROMTO_COMPONENTS: [&str; 6] = ["x1", "y1", "z1", "x2", "y2", "z2"]
 
 /// Names of the components of a `camprojection` sensor, in `sensordata` order.
 const SENSOR_CAMPROJECTION_COMPONENTS: [&str; 2] = ["u", "v"];
+
+/// Bitmask of the rangefinder data fields (`sensor_intprm[0]`) whose values are lengths.
+const RANGEFINDER_DISTANCE_DATA: i32 = (1 << MjtRayDataField::mjRAYDATA_DIST as i32)
+    | (1 << MjtRayDataField::mjRAYDATA_ORIGIN as i32)
+    | (1 << MjtRayDataField::mjRAYDATA_POINT as i32)
+    | (1 << MjtRayDataField::mjRAYDATA_DEPTH as i32);
 
 /// Value change per point of pointer travel in the numeric input of a joint component.
 const JOINT_INPUT_DRAG_SPEED: f64 = 0.01;
@@ -381,7 +390,8 @@ impl ViewerUI {
             let is_unit_motor = model.actuator_gaintype()[idx_actuator] == MjtGain::mjGAIN_FIXED
                 && model.actuator_gainprm()[idx_actuator][0].abs() == 1.0
                 && model.actuator_biastype()[idx_actuator] == MjtBias::mjBIAS_NONE
-                && matches!(dyntype, MjtDyn::mjDYN_NONE | MjtDyn::mjDYN_FILTER | MjtDyn::mjDYN_FILTEREXACT);
+                && matches!(dyntype, MjtDyn::mjDYN_NONE | MjtDyn::mjDYN_FILTER | MjtDyn::mjDYN_FILTEREXACT)
+                && model.actuator_plugin()[idx_actuator] < 0;
 
             let components = (0..num_inputs)
                 .map(|idx_in| {
@@ -563,13 +573,24 @@ impl ViewerUI {
                 MjtSensor::mjSENS_E_POTENTIAL | MjtSensor::mjSENS_E_KINETIC => scalar((" J", None)),
                 MjtSensor::mjSENS_CLOCK => scalar((" s", None)),
 
+                // A rangefinder without "dir" and "normal" outputs only lengths.
+                MjtSensor::mjSENS_RANGEFINDER
+                    if model.sensor_intprm()[index][0] & !RANGEFINDER_DISTANCE_DATA == 0 =>
+                {
+                    (0..sensor_dim).map(|i| {
+                        ComponentDisplayInfo { label: (sensor_dim > 1).then(|| i.to_string()), range: None, unit: " m" }
+                    }).collect()
+                }
+
                 // Attribute-dependent dimensions
                 MjtSensor::mjSENS_RANGEFINDER
                 | MjtSensor::mjSENS_CONTACT
                 | MjtSensor::mjSENS_TACTILE
                 | MjtSensor::mjSENS_USER
                 | MjtSensor::mjSENS_PLUGIN => {
-                    (0..sensor_dim).map(|_| ComponentDisplayInfo { label: None, range: None, unit: "" }).collect()
+                    (0..sensor_dim).map(|i| {
+                        ComponentDisplayInfo { label: (sensor_dim > 1).then(|| i.to_string()), range: None, unit: "" }
+                    }).collect()
                 }
             };
 
