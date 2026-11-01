@@ -619,8 +619,11 @@ impl ViewerUI {
                     }).flatten().collect(), num as usize)
                 }
 
-                MjtSensor::mjSENS_TACTILE
-                | MjtSensor::mjSENS_USER
+                MjtSensor::mjSENS_TACTILE => {
+                    todo!()
+                }
+
+                MjtSensor::mjSENS_USER
                 | MjtSensor::mjSENS_PLUGIN => {
                     let components = (0..sensor_dim).map(|i| {
                         ComponentDisplayInfo { label: (sensor_dim > 1).then(|| i.to_string()), range: None, unit: "" }
