@@ -1,9 +1,4 @@
-//! Example of the actuator and joint controls in the viewer UI.
-//! The model holds one actuator of every input flavour: actuators whose type defines no input
-//! names (motor, position), actuators whose control block holds several named inputs (pid,
-//! dcmotor, orientation), an actuator without a name, an actuator without control inputs, and
-//! control ranges that differ between the inputs of one actuator. It also holds a limited ball
-//! joint, an unlimited ball joint and a free joint.
+//! Example of different control-info windows inside the Viewer's (egui) UI.
 //!
 //! Open the "Actuator" window in the viewer. Each actuator holds one slider for each of its
 //! control inputs, labelled with the input name that MuJoCo reports for the actuator type.
@@ -15,6 +10,10 @@
 //! Open the "Sensor" window in the viewer. Each sensor shows one value for each of its
 //! components, labelled with the axis or the quaternion component and the unit of the quantity.
 //! The free box carries a touch sensor, an accelerometer and a gyro on its site.
+//!
+//! Open the "Equality" window in the viewer. Each equality constraint holds one toggle button,
+//! which switches the constraint on or off at runtime. The connect constraint starts inactive;
+//! switch it on to attach the passive DC motor arm to the driven DC motor arm.
 use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;
@@ -54,11 +53,13 @@ const EXAMPLE_MODEL: &str = stringify! {
     <body name="dcmotor_arm" pos=".4 0 .4">
       <joint name="dcmotor_hinge" type="hinge" axis="0 1 0"/>
       <geom fromto="0 0 0 0 0 -.25" rgba=".9 .7 .2 1"/>
+      <site name="dcmotor_arm_site" type="box" size="0.06 0.06 0.06" pos="0 0 -0.25" rgba="0 0 0 0"/>
     </body>
 
     <body name="dcmotor_passive_arm" pos="1.1 0 .4">
       <joint name="dcmotor_passive_hinge" type="hinge" axis="0 1 0"/>
       <geom fromto="0 0 0 0 0 -.25" rgba=".6 .4 .8 1"/>
+      <site name="dcmotor_passice_arm_site" type="box" size="0.06 0.06 0.06" pos="0 0 -0.25" rgba="0 0 0 0"/>
     </body>
 
     <body name="expmap_box" pos="1.8 0 .4">
@@ -117,6 +118,10 @@ const EXAMPLE_MODEL: &str = stringify! {
     <gyro name="free_gyro" site="free_site"/>
     <clock/>
   </sensor>
+
+  <equality>
+    <connect site1="dcmotor_arm_site" site2="dcmotor_passice_arm_site" solref="0.25 1" active="false"/>
+  </equality>
 </mujoco>
 };
 
