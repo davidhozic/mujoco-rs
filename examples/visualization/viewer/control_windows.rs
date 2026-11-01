@@ -93,14 +93,14 @@ const EXAMPLE_MODEL: &str = stringify! {
     <body name="gear1" pos="3.8 0 .4" childclass="gear">
       <joint name="gear_hinge1" type="hinge" axis="0 1 0"/>
       <replicate count="18" euler="0 20 0">
-        <geom pos=".09 0 0"/>
+        <geom name="gear1_geom" pos=".09 0 0"/>
       </replicate>
     </body>
 
     <body name="gear2" pos="3.98 0 .4" euler="0 10 0" childclass="gear">
       <joint name="gear_hinge2" type="hinge" axis="0 1 0"/>
       <replicate count="18" euler="0 20 0">
-        <geom pos=".09 0 0"/>
+        <geom name="gear2_geom" pos=".09 0 0"/>
       </replicate>
     </body>
   </worldbody>
@@ -137,8 +137,11 @@ const EXAMPLE_MODEL: &str = stringify! {
     <touch name="free_touch" site="free_site"/>
     <accelerometer name="free_acc" site="free_site"/>
     <gyro name="free_gyro" site="free_site"/>
-    // <clock/>
     <contact name="free_contact" site="free_site" data="found force" num="5"/>
+    <tactile geom="gear1_geom" mesh="gear_tooth"/>
+    // TODO: Uncomment when MuJoCo fixes the bug. There seems to be some issue with wrong replication when using
+    // the above <replicate> command.
+    // <clock/>
     // <user name="user_sensor" dim="0"/>
   </sensor>
 
