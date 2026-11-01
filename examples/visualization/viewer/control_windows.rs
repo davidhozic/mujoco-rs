@@ -22,12 +22,20 @@ use env_logger::Env;
 
 const EXAMPLE_MODEL: &str = stringify! {
 <mujoco model="control_windows">
-  <option integrator="implicitfast"/>
+  // The Newton solver diverges on the gear tooth contacts; PGS stays stable.
+  <option integrator="implicitfast" solver="PGS"/>
   <statistic center=".25 0 .3" extent="4"/>
+
+  <asset>
+    <mesh name="gear_tooth" builtin="supersphere" params="10 1 1" scale=".0075 .0075 .0175"/>
+  </asset>
 
   <default>
     <geom type="capsule" size=".035" rgba=".7 .7 .75 1"/>
     <joint damping=".2"/>
+    <default class="gear">
+      <geom type="ellipsoid" size=".0075 .0075 .0175" euler="90 0 0" friction=".1" rgba=".9 .35 .65 1"/>
+    </default>
   </default>
 
   <worldbody>
@@ -81,6 +89,20 @@ const EXAMPLE_MODEL: &str = stringify! {
       <geom type="box" size=".06 .06 .06" rgba=".8 .8 .4 1"/>
       <site name="free_site" type="box" size=".065 .065 .065" rgba="0 0 0 0"/>
     </body>
+
+    <body name="gear1" pos="3.8 0 .4" childclass="gear">
+      <joint name="gear_hinge1" type="hinge" axis="0 1 0"/>
+      <replicate count="18" euler="0 20 0">
+        <geom pos=".09 0 0"/>
+      </replicate>
+    </body>
+
+    <body name="gear2" pos="3.98 0 .4" euler="0 10 0" childclass="gear">
+      <joint name="gear_hinge2" type="hinge" axis="0 1 0"/>
+      <replicate count="18" euler="0 20 0">
+        <geom pos=".09 0 0"/>
+      </replicate>
+    </body>
   </worldbody>
 
   <actuator>
@@ -115,9 +137,9 @@ const EXAMPLE_MODEL: &str = stringify! {
     <touch name="free_touch" site="free_site"/>
     <accelerometer name="free_acc" site="free_site"/>
     <gyro name="free_gyro" site="free_site"/>
-    <clock/>
+    // <clock/>
     <contact name="free_contact" site="free_site" data="found force" num="5"/>
-    <user name="user_sensor" dim="0"/>
+    // <user name="user_sensor" dim="0"/>
   </sensor>
 
   <equality>
