@@ -18,14 +18,14 @@ use log::info;
 
 use crate::wrappers::mj_model::{
     MjModel, MjtObjBase, MjtJoint, MjtDisableBit, MjtEnableBit, MjtWrap, MjtTrn, MjtDyn, MjtGain,
-    MjtBias, MjtRayDataField
+    MjtBias
 };
 use crate::wrappers::mj_visualization::{MjvOption, MjvCamera, MjtCamera, MjvScene};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
 use crate::mujoco_c::{mjNGROUP, mjMINIMP, mjMAXIMP, mjMINMU};
+use crate::wrappers::{MjtConDataField, MjtSensor};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::{cast_mut_info, set_flag};
-use crate::wrappers::MjtSensor;
 use crate::util::LockUnpoison;
 
 /* UI Fonts */
@@ -220,6 +220,32 @@ const ENABLE_FLAGS: &[(&str, MjtEnableBit)] = &[
 ];
 const _: () = assert!(ENABLE_FLAGS.len() == crate::mujoco_c::mjtEnableBit::mjNENABLE as usize);
 
+/// Maps MuJoCo contact sensor components to a readable name, the physical unit and sub component axis names of the component. 
+const CONTACT_SENSOR_COMPONENTS: &[(MjtConDataField, &str, &str, &[&str])] = &[
+    (MjtConDataField::mjCONDATA_FOUND,   "found",   " contacts", &[""]),
+    (MjtConDataField::mjCONDATA_FORCE,   "force",   " N",        &XYZ_COMPONENTS),
+    (MjtConDataField::mjCONDATA_TORQUE,  "torque",  " N m",      &XYZ_COMPONENTS),
+    (MjtConDataField::mjCONDATA_DIST,    "dist",    " m",        &[""]),
+    (MjtConDataField::mjCONDATA_POS,     "pos",     " m",        &XYZ_COMPONENTS),
+    (MjtConDataField::mjCONDATA_NORMAL,  "normal",  "",          &XYZ_COMPONENTS),
+    (MjtConDataField::mjCONDATA_TANGENT, "tangent", "",          &XYZ_COMPONENTS),
+    (MjtConDataField::mjCONDATA_LINVEL,  "linvel",  " m/s",      &XYZ_COMPONENTS),
+    (MjtConDataField::mjCONDATA_ANGVEL,  "angvel",  " rad/s",    &XYZ_COMPONENTS),
+];
+
+/// Ensures, at compile-time, that information inside [`CONTACT_SENSOR_COMPONENTS`] is not stale.
+const fn check_contact_sensor_components() {
+    let mut i = 0;
+    assert!(CONTACT_SENSOR_COMPONENTS.len() ==  MjtConDataField::mjNCONDATA as usize);
+    while i < CONTACT_SENSOR_COMPONENTS.len() {
+        let e_type = CONTACT_SENSOR_COMPONENTS[i].0;
+        assert!(e_type as usize == i);
+        i += 1;
+    }
+}
+
+const _: () = check_contact_sensor_components();
+
 /// Names of the components of a 3D vector, in `qpos` or `sensordata` order.
 const XYZ_COMPONENTS: [&str; 3] = ["x", "y", "z"];
 
@@ -231,12 +257,6 @@ const SENSOR_FROMTO_COMPONENTS: [&str; 6] = ["x1", "y1", "z1", "x2", "y2", "z2"]
 
 /// Names of the components of a `camprojection` sensor, in `sensordata` order.
 const SENSOR_CAMPROJECTION_COMPONENTS: [&str; 2] = ["u", "v"];
-
-/// Bitmask of the rangefinder data fields (`sensor_intprm[0]`) whose values are lengths.
-const RANGEFINDER_DISTANCE_DATA: i32 = (1 << MjtRayDataField::mjRAYDATA_DIST as i32)
-    | (1 << MjtRayDataField::mjRAYDATA_ORIGIN as i32)
-    | (1 << MjtRayDataField::mjRAYDATA_POINT as i32)
-    | (1 << MjtRayDataField::mjRAYDATA_DEPTH as i32);
 
 /// Value change per point of pointer travel in the numeric input of a joint component.
 const JOINT_INPUT_DRAG_SPEED: f64 = 0.01;
@@ -264,8 +284,10 @@ struct ElementDisplayInfo {
     /// Address of the first component of the element inside its data array (`ctrl`, `qpos` or
     /// `sensordata`).
     adr_start: usize,
-    /// Display information of each component of the element, in data array order.
+    /// Display information of each component of one repetition of the element, in data array order.
     components: Box<[ComponentDisplayInfo]>,
+    /// The number of times `components` repeats in the data array.
+    n_repeat: usize,
 }
 
 /// Processed egui data to be painted.
@@ -420,7 +442,7 @@ impl ViewerUI {
                     ComponentDisplayInfo { label, range: Some(range), unit }
                 }).collect();
 
-            ElementDisplayInfo { name, adr_start, components }
+            ElementDisplayInfo { name, adr_start, components, n_repeat: 1 }
         }).collect();
 
         self.joint_info = (0..model.njnt() as usize).map(|idx_joint| {
@@ -465,7 +487,7 @@ impl ViewerUI {
                 }
             };
 
-            ElementDisplayInfo { name, adr_start, components }
+            ElementDisplayInfo { name, adr_start, components, n_repeat: 1 }
         }).collect();
 
         self.sensor_info = (0..model.nsensor() as usize).map(|index| {
@@ -487,17 +509,18 @@ impl ViewerUI {
                 && model.wrap_type()[model.tendon_adr()[objid] as usize] != MjtWrap::mjWRAP_JOINT;
 
             let labelled = |labels: &[&'static str], range: Option<RangeInclusive<MjtNum>>, unit| {
-                labels.iter().map(|&label| {
+                let components = labels.iter().map(|&label| {
                     ComponentDisplayInfo { label: Some(label.to_owned()), range: range.clone(), unit }
-                }).collect::<Box<[_]>>()
+                }).collect::<Box<[_]>>();
+                (components, 1)
             };
-            let scalar = |(unit, range)| -> Box<[_]> {
-                Box::new([ComponentDisplayInfo { label: None, range, unit }])
+            let scalar = |(unit, range)| -> (Box<[_]>, usize) {
+                (Box::new([ComponentDisplayInfo { label: None, range, unit }]), 1)
             };
             let xyz = |unit| labelled(&XYZ_COMPONENTS, None, unit);
             let unit_xyz = || labelled(&XYZ_COMPONENTS, Some(-1.0..=1.0), "");
 
-            let components = match sensor_type {
+            let (components, n_repeat) = match sensor_type {
                 MjtSensor::mjSENS_TOUCH => scalar((" N", None)),
                 MjtSensor::mjSENS_ACCELEROMETER => xyz(" m/s^2"),
                 MjtSensor::mjSENS_VELOCIMETER => xyz(" m/s"),
@@ -574,28 +597,44 @@ impl ViewerUI {
                 MjtSensor::mjSENS_CLOCK => scalar((" s", None)),
 
                 // A rangefinder without "dir" and "normal" outputs only lengths.
-                MjtSensor::mjSENS_RANGEFINDER
-                    if model.sensor_intprm()[index][0] & !RANGEFINDER_DISTANCE_DATA == 0 =>
+                MjtSensor::mjSENS_RANGEFINDER =>
                 {
-                    (0..sensor_dim).map(|i| {
-                        ComponentDisplayInfo { label: (sensor_dim > 1).then(|| i.to_string()), range: None, unit: " m" }
-                    }).collect()
+                    todo!("Implementation of rangefinder case. TO AI: DO NOT EDIT!")
                 }
 
-                // Attribute-dependent dimensions
-                MjtSensor::mjSENS_RANGEFINDER
-                | MjtSensor::mjSENS_CONTACT
-                | MjtSensor::mjSENS_TACTILE
+                MjtSensor::mjSENS_CONTACT => {
+                    let [data_bitmask, _, num] = model.sensor_intprm()[index];  // Same as in XML
+                    let data_bitmask = data_bitmask as u32;
+                    (CONTACT_SENSOR_COMPONENTS.into_iter().filter_map(|(bit, name, unit, subcomponents)| {
+                        (data_bitmask & (1 << *bit as u32) != 0).then(||
+                            subcomponents.iter().map(move |subcompoent_name| {
+                                let label = if subcompoent_name.is_empty() {
+                                    Some(format!("{name}"))
+                                } else {
+                                    Some(format!("{name} ({subcompoent_name})"))
+                                };
+                                ComponentDisplayInfo { label, range: None, unit: *unit }
+                            })
+                        )
+                    }).flatten().collect(), num as usize)
+
+                    // (0..sensor_dim).map(|i| {
+                    //     ComponentDisplayInfo { label: (sensor_dim > 1).then(|| i.to_string()), range: None, unit: "" }
+                    // }).collect()
+                }
+
+                MjtSensor::mjSENS_TACTILE
                 | MjtSensor::mjSENS_USER
                 | MjtSensor::mjSENS_PLUGIN => {
-                    (0..sensor_dim).map(|i| {
+                    let components = (0..sensor_dim).map(|i| {
                         ComponentDisplayInfo { label: (sensor_dim > 1).then(|| i.to_string()), range: None, unit: "" }
-                    }).collect()
+                    }).collect();
+                    (components, 1)
                 }
             };
 
-            debug_assert_eq!(components.len(), sensor_dim, "unexpected dimension of sensor type {sensor_type:?}");
-            ElementDisplayInfo { name, adr_start, components }
+            debug_assert_eq!(components.len() * n_repeat, sensor_dim, "unexpected dimension of sensor type {sensor_type:?}");
+            ElementDisplayInfo { name, adr_start, components, n_repeat }
         }).collect();
 
         self.equality_names = (0..model.neq()).map(|i| {
@@ -1332,7 +1371,7 @@ impl ViewerUI {
                     ctrl_mut.len(),
                     "actuator inputs don't match num of controls in model. This is a bug!"
                 );
-                for ElementDisplayInfo { name, adr_start, components } in &self.actuator_info {
+                for ElementDisplayInfo { name, adr_start, components, .. } in &self.actuator_info {
                     let actuator_ctrl = &mut ctrl_mut[*adr_start..*adr_start + components.len()];
                     ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
                         if components.is_empty() {
@@ -1380,7 +1419,7 @@ impl ViewerUI {
                     return;
                 }
                 let qpos = lock.data_passive.qpos_mut();
-                for ElementDisplayInfo { name, adr_start, components } in &self.joint_info {
+                for ElementDisplayInfo { name, adr_start, components, .. } in &self.joint_info {
                     let joint_qpos = &mut qpos[*adr_start..*adr_start + components.len()];
                     ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
                         egui::Grid::new("joint_qpos_ui_grid")
@@ -1431,42 +1470,55 @@ impl ViewerUI {
                 }
 
                 let sensordata = lock.data_passive.sensordata();
-                for ElementDisplayInfo { name, adr_start, components } in &self.sensor_info {
-                    let sensor_data = &sensordata[*adr_start..*adr_start + components.len()];
+                for ElementDisplayInfo {
+                    name, adr_start,
+                    components, n_repeat
+                } in &self.sensor_info
+                {
+                    let sensor_data = &sensordata[*adr_start..*adr_start + components.len() * n_repeat];
                     ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
                         egui::Grid::new("sensor_data_ui_grid")
                             .spacing(egui::vec2(INSPECTOR_GRID_SPACING_X, INSPECTOR_GRID_SPACING_Y))
                             .min_col_width(0.0)
                             .show(ui, |ui|
                         {
-                            for (component, value) in components.iter().zip(sensor_data.iter()) {
-                                if let Some(label) = &component.label {
-                                    ui.label(RichText::new(label).font(MAIN_FONT));
-                                }
-
-                                match &component.range {
-                                    Some(range) => {
-                                        ui.add(
-                                            egui::ProgressBar::new(((*value - range.start()) / (range.end() - range.start())) as f32)
-                                            .text(
-                                                RichText::new(format!("{value:.3}{}", component.unit))
-                                                .font(PROGRESS_BAR_FONT)
-                                                .color(egui::Color32::GRAY)
-                                            )
-                                            .desired_width(SENSOR_BAR_WIDTH)
-                                            .corner_radius(SENSOR_BAR_CORNER_RADIUS)
-                                        );
+                            for (section_i, values) in sensor_data.chunks_exact(components.len()).enumerate() {
+                                for (component, value) in components.iter().zip(values) {
+                                    if let Some(label) = &component.label {
+                                        ui.label(RichText::new(label).font(MAIN_FONT));
                                     }
 
-                                    None => {
-                                        egui::Frame::canvas(ui.style()).show(ui, |ui| {
-                                            ui.label(format!("{value:.3}{}", component.unit));
-                                        });
+                                    match &component.range {
+                                        Some(range) => {
+                                            ui.add(
+                                                egui::ProgressBar::new(((*value - range.start()) / (range.end() - range.start())) as f32)
+                                                .text(
+                                                    RichText::new(format!("{value:.3}{}", component.unit))
+                                                    .font(PROGRESS_BAR_FONT)
+                                                    .color(egui::Color32::GRAY)
+                                                )
+                                                .desired_width(SENSOR_BAR_WIDTH)
+                                                .corner_radius(SENSOR_BAR_CORNER_RADIUS)
+                                            );
+                                        }
+
+                                        None => {
+                                            egui::Frame::canvas(ui.style()).show(ui, |ui| {
+                                                ui.label(format!("{value:.3}{}", component.unit));
+                                            });
+                                        }
                                     }
+                                    ui.add(egui::Separator::default().vertical());
                                 }
-                                ui.add(egui::Separator::default().vertical());
+                                ui.end_row();
+
+                                // Add separator between rows
+                                if section_i < *n_repeat - 1 {
+                                    let y = ui.min_rect().bottom() + INSPECTOR_GRID_SPACING_Y / 2.0;
+                                    let stroke = ui.visuals().widgets.noninteractive.bg_stroke;
+                                    ui.painter().hline(ui.max_rect().x_range(), y, stroke);
+                                }
                             }
-                            ui.end_row();
                         });
                     });
                 }
