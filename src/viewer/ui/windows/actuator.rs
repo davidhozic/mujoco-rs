@@ -1,1 +1,128 @@
 //! A submodule of the viewer's UI representing the actuator window definitions.
+use std::sync::{Arc, Mutex};
+
+use egui_winit::egui;
+use egui::RichText;
+
+use crate::wrappers::mj_model::{MjModel, MjtObjBase, MjtJoint, MjtDyn, MjtGain, MjtBias};
+use crate::viewer::ui::{MAIN_FONT, SECONDARY_FONT};
+use crate::viewer::ViewerSharedState;
+use crate::util::LockUnpoison;
+
+use super::{
+    ComponentDisplayInfo, ElementDisplayInfo, INSPECTOR_GRID_SPACING_X, INSPECTOR_GRID_SPACING_Y,
+    actuator_joint_type
+};
+
+pub(crate) fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo> {
+    (0..model.nactuator() as usize).map(|idx_actuator| {
+        let input_limits = model.actuator_ctrlrange();
+        let adr_start = model.actuator_ctrladr()[idx_actuator] as usize;
+        let num_inputs = model.actuator_ctrlnum()[idx_actuator] as usize;
+
+        let name = model.id_to_name(MjtObjBase::mjOBJ_ACTUATOR, idx_actuator)
+            .map(|name| name.to_string())
+            .unwrap_or_else(|| format!("Actuator {idx_actuator}"));
+
+        let joint_type = actuator_joint_type(model, idx_actuator);
+        let is_slide = joint_type == Some(MjtJoint::mjJNT_SLIDE);
+        let dyntype = model.actuator_dyntype()[idx_actuator];
+        let is_integrator = dyntype == MjtDyn::mjDYN_INTEGRATOR;
+        let is_unit_motor = model.actuator_gaintype()[idx_actuator] == MjtGain::mjGAIN_FIXED
+            && model.actuator_gainprm()[idx_actuator][0].abs() == 1.0
+            && model.actuator_biastype()[idx_actuator] == MjtBias::mjBIAS_NONE
+            && matches!(dyntype, MjtDyn::mjDYN_NONE | MjtDyn::mjDYN_FILTER | MjtDyn::mjDYN_FILTEREXACT)
+            && model.actuator_plugin()[idx_actuator] < 0;
+
+        let components = (0..num_inputs)
+            .map(|idx_in| {
+                // Most actuator types define no input names. An actuator with more than one
+                // input then shows the input index, an actuator with one input shows no label.
+                let input_name = model.actuator_input_name(idx_actuator, idx_in);
+                let label = input_name
+                    .map(str::to_owned)
+                    .or_else(|| (num_inputs > 1).then(|| idx_in.to_string()));
+
+                let [low, high] = input_limits[adr_start + idx_in];
+                let range = if low < high { low..=high } else { -1.0..=1.0 };
+                let unit = match input_name {
+                    Some("voltage") => " V",
+                    Some("rx" | "ry" | "rz") => if is_integrator { " rad/s" } else { " rad" },
+                    _ if joint_type.is_none() => "",
+                    Some("pos") => if is_slide { " m" } else { " rad" },
+                    Some("vel") => if is_slide { " m/s" } else { " rad/s" },
+                    Some("ff") => if is_slide { " N" } else { " N m" },
+                    None if is_unit_motor => if is_slide { " N" } else { " N m" },
+                    // The gain of a pressure input is an area, so the force must be in N.
+                    Some("pressure") if is_slide => " Pa",
+                    _ => ""
+                };
+
+                ComponentDisplayInfo { label, range: Some(range), unit }
+            }).collect();
+
+        ElementDisplayInfo::Full { name, adr_start, components, row_names: None }
+    })
+}
+
+pub(crate) fn show(
+    ui: &mut egui::Ui, open: &mut bool, actuator_info: &[ElementDisplayInfo],
+    shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
+)
+{
+    egui::Window::new("Actuator")
+        .scroll(true)
+        .drag_to_scroll(egui::scroll_area::DragScroll::Always)
+        .open(open)
+        .show(ui, |ui|
+    {
+        let mut lock = shared_viewer_state.lock_unpoison();
+        if lock.model_reloaded {
+            return;
+        }
+        let ctrl_mut = lock.data_passive.ctrl_mut();
+        for info in actuator_info {
+            match info {
+                ElementDisplayInfo::NameOnly { name } => {
+                    ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
+                        ui.label(RichText::new("unsupported").font(SECONDARY_FONT));
+                    });
+                }
+                ElementDisplayInfo::Full { name, adr_start, components, .. } => {
+                    let actuator_ctrl = &mut ctrl_mut[*adr_start..*adr_start + components.len()];
+                    ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
+                        if components.is_empty() {
+                            ui.label(RichText::new("no inputs").font(SECONDARY_FONT));
+                            return;
+                        }
+
+                        egui::Grid::new("actuator_ctrl_ui_grid")
+                            .spacing(egui::vec2(INSPECTOR_GRID_SPACING_X, INSPECTOR_GRID_SPACING_Y))
+                            .min_col_width(0.0)
+                            .show(ui, |ui|
+                        {
+                            for (component, ctrl) in components.iter().zip(actuator_ctrl) {
+                                if let Some(label) = &component.label {
+                                    ui.label(RichText::new(label).font(SECONDARY_FONT));
+                                }
+                                ui.add(
+                                    egui::Slider::new(ctrl, component.range.clone().unwrap())
+                                    .clamping(egui::SliderClamping::Never)
+                                    .update_while_editing(false)
+                                    .suffix(component.unit)
+                                );
+                                ui.add(egui::Separator::default().vertical());
+                            }
+                            ui.end_row();
+                        });
+                    });
+                }
+            }
+        }
+
+        // Clear all actuator controls by setting them to 0
+        if ui.button(RichText::new("Clear").font(MAIN_FONT)).clicked() {
+            ctrl_mut.fill(0.0);
+        }
+    });
+}
