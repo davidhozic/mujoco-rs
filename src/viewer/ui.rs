@@ -40,6 +40,8 @@ const SIDE_PANEL_PAD: f32 = 10.0;
 const MAX_SPAN_WIDTH: f32 = 350.0;
 const INSPECTOR_GRID_SPACING_X: f32 = 6.0;
 const INSPECTOR_GRID_SPACING_Y: f32 = 10.0;
+const SENSOR_BAR_WIDTH: f32 = 75.0;
+const SENSOR_BAR_CORNER_RADIUS: u8 = 3;
 
 /* Precision and Tolerances */
 const RANGE_PRECISION_TOLERANCE: f32 = 1e-4;
@@ -412,8 +414,8 @@ impl ViewerUI {
             let limits = model.jnt_range()[idx_joint];
 
             let components = match model.jnt_type()[idx_joint] {
-                // A free joint holds no limit and no natural range, so each of its components
-                // takes a numeric input.
+                // A free joint holds no limit and no natural range for its position, so each
+                // translation component takes a numeric input.
                 MjtJoint::mjJNT_FREE => {
                     let translation = XYZ_COMPONENTS.map(|label| {
                         ComponentDisplayInfo { label: Some(label), range: None, unit: " m" }
@@ -471,14 +473,14 @@ impl ViewerUI {
                     ComponentDisplayInfo { label: Some(label), range: range.clone(), unit }
                 }).collect::<Box<[_]>>()
             };
-            let scalar = |unit| -> Box<[_]> {
-                Box::new([ComponentDisplayInfo { label: None, range: None, unit }])
+            let scalar = |(unit, range)| -> Box<[_]> {
+                Box::new([ComponentDisplayInfo { label: None, range, unit }])
             };
             let xyz = |unit| labelled(&XYZ_COMPONENTS, None, unit);
             let unit_xyz = || labelled(&XYZ_COMPONENTS, Some(-1.0..=1.0), "");
 
             let components = match sensor_type {
-                MjtSensor::mjSENS_TOUCH => scalar(" N"),
+                MjtSensor::mjSENS_TOUCH => scalar((" N", None)),
                 MjtSensor::mjSENS_ACCELEROMETER => xyz(" m/s^2"),
                 MjtSensor::mjSENS_VELOCIMETER => xyz(" m/s"),
                 MjtSensor::mjSENS_GYRO => xyz(" rad/s"),
@@ -488,31 +490,36 @@ impl ViewerUI {
                 MjtSensor::mjSENS_MAGNETOMETER => xyz(""),
                 MjtSensor::mjSENS_CAMPROJECTION => labelled(&SENSOR_CAMPROJECTION_COMPONENTS, None, " px"),
 
-                MjtSensor::mjSENS_JOINTPOS | MjtSensor::mjSENS_JOINTLIMITPOS => {
-                    scalar(if is_slide { " m" } else { " rad" })
+                MjtSensor::mjSENS_JOINTPOS => {
+                    let jnt_id = model.sensor_objid()[index] as usize;
+                    let range = model.jnt_limited()[jnt_id]
+                        .then(|| { let [l, r] = model.jnt_range()[jnt_id]; l..=r });
+                    scalar((if is_slide { " m" } else { " rad" }, range))
                 }
+                // The value is the distance to the limit, not a position inside the joint range.
+                MjtSensor::mjSENS_JOINTLIMITPOS => scalar((if is_slide { " m" } else { " rad" }, None)),
                 MjtSensor::mjSENS_JOINTVEL | MjtSensor::mjSENS_JOINTLIMITVEL => {
-                    scalar(if is_slide { " m/s" } else { " rad/s" })
+                    scalar((if is_slide { " m/s" } else { " rad/s" }, None))
                 }
                 MjtSensor::mjSENS_JOINTACTFRC | MjtSensor::mjSENS_JOINTLIMITFRC => {
-                    scalar(if is_slide { " N" } else { " N m" })
+                    scalar((if is_slide { " N" } else { " N m" }, None))
                 }
 
                 MjtSensor::mjSENS_TENDONPOS | MjtSensor::mjSENS_TENDONLIMITPOS => {
-                    scalar(if is_spatial_tendon { " m" } else { "" })
+                    scalar((if is_spatial_tendon { " m" } else { "" }, None))
                 }
                 MjtSensor::mjSENS_TENDONVEL | MjtSensor::mjSENS_TENDONLIMITVEL => {
-                    scalar(if is_spatial_tendon { " m/s" } else { "" })
+                    scalar((if is_spatial_tendon { " m/s" } else { "" }, None))
                 }
                 MjtSensor::mjSENS_TENDONACTFRC | MjtSensor::mjSENS_TENDONLIMITFRC => {
-                    scalar(if is_spatial_tendon { " N" } else { "" })
+                    scalar((if is_spatial_tendon { " N" } else { "" }, None))
                 }
 
                 // The unit of an actuator quantity depends on its transmission and gain. The sensor
                 // has one value per actuator output; an orientation actuator has one output per axis.
                 MjtSensor::mjSENS_ACTUATORPOS
                 | MjtSensor::mjSENS_ACTUATORVEL
-                | MjtSensor::mjSENS_ACTUATORFRC => if sensor_dim == 3 { xyz("") } else { scalar("") },
+                | MjtSensor::mjSENS_ACTUATORFRC => if sensor_dim == 3 { xyz("") } else { scalar(("", None)) },
 
                 MjtSensor::mjSENS_BALLQUAT | MjtSensor::mjSENS_FRAMEQUAT => {
                     labelled(&QUAT_COMPONENTS, Some(-1.0..=1.0), "")
@@ -531,14 +538,12 @@ impl ViewerUI {
                 MjtSensor::mjSENS_SUBTREEANGMOM => xyz(" kg m^2/s"),
 
                 // An "enclosed" sensor gives a signed distance to the site boundary.
-                MjtSensor::mjSENS_INSIDESITE if model.sensor_intprm()[index][0] != 0 => scalar(" m"),
-                MjtSensor::mjSENS_INSIDESITE => {
-                    Box::new([ComponentDisplayInfo { label: None, range: Some(0.0..=1.0), unit: "" }])
-                }
-                MjtSensor::mjSENS_GEOMDIST => scalar(" m"),
+                MjtSensor::mjSENS_INSIDESITE if model.sensor_intprm()[index][0] != 0 => scalar((" m", None)),
+                MjtSensor::mjSENS_INSIDESITE => scalar(("", Some(0.0..=1.0))),
+                MjtSensor::mjSENS_GEOMDIST => scalar((" m", None)),
                 MjtSensor::mjSENS_GEOMFROMTO => labelled(&SENSOR_FROMTO_COMPONENTS, None, " m"),
-                MjtSensor::mjSENS_E_POTENTIAL | MjtSensor::mjSENS_E_KINETIC => scalar(" J"),
-                MjtSensor::mjSENS_CLOCK => scalar(" s"),
+                MjtSensor::mjSENS_E_POTENTIAL | MjtSensor::mjSENS_E_KINETIC => scalar((" J", None)),
+                MjtSensor::mjSENS_CLOCK => scalar((" s", None)),
 
                 // Attribute-dependent dimensions
                 MjtSensor::mjSENS_RANGEFINDER
@@ -1340,7 +1345,6 @@ impl ViewerUI {
                 for JointDisplayInfo { name, qpos_start, components } in &self.joint_info {
                     let joint_qpos = &mut qpos[*qpos_start..*qpos_start + components.len()];
                     ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
-                        let mut edited = false;
                         egui::Grid::new("joint_qpos_ui_grid")
                             .spacing(egui::vec2(INSPECTOR_GRID_SPACING_X, INSPECTOR_GRID_SPACING_Y))
                             .min_col_width(0.0)
@@ -1353,7 +1357,7 @@ impl ViewerUI {
 
                                 // A slider must not clamp: the simulation reaches values outside
                                 // the range, for example a hinge that turns past pi.
-                                edited |= match &component.range {
+                                match &component.range {
                                     Some(range) => ui.add(
                                         egui::Slider::new(value, range.clone())
                                         .clamping(egui::SliderClamping::Never)
@@ -1367,7 +1371,7 @@ impl ViewerUI {
                                         .update_while_editing(false)
                                         .suffix(component.unit)
                                     )
-                                }.changed();
+                                };
                                 ui.add(egui::Separator::default().vertical());
                             }
                             ui.end_row();
@@ -1383,14 +1387,14 @@ impl ViewerUI {
                 .drag_to_scroll(egui::scroll_area::DragScroll::Always)
                 .show(ui, |ui|
             {
-                let mut lock = shared_viewer_state.lock_unpoison();
+                let lock = shared_viewer_state.lock_unpoison();
                 if lock.model_reloaded {
                     return;
                 }
 
-                let sensordata = lock.data_passive.sensordata_mut();
+                let sensordata = lock.data_passive.sensordata();
                 for SensorDisplayInfo { name, data_start, components } in &self.sensor_info {
-                    let sensor_data = &mut sensordata[*data_start..*data_start + components.len()];
+                    let sensor_data = &sensordata[*data_start..*data_start + components.len()];
                     ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
                         egui::Grid::new("sensor_data_ui_grid")
                             .spacing(egui::vec2(INSPECTOR_GRID_SPACING_X, INSPECTOR_GRID_SPACING_Y))
@@ -1404,14 +1408,15 @@ impl ViewerUI {
 
                                 match &component.range {
                                     Some(range) => {
-                                        let response = ui.add(
+                                        ui.add(
                                             egui::ProgressBar::new(((*value - range.start()) / (range.end() - range.start())) as f32)
-                                            .desired_width(100.0)
-                                        );
-                                        ui.painter().text(
-                                            response.rect.center(), egui::Align2::CENTER_CENTER,
-                                            format!("{value:.3}{}", component.unit),
-                                            PROGRESS_BAR_FONT, egui::Color32::GRAY
+                                            .text(
+                                                RichText::new(format!("{value:.3}{}", component.unit))
+                                                .font(PROGRESS_BAR_FONT)
+                                                .color(egui::Color32::GRAY)
+                                            )
+                                            .desired_width(SENSOR_BAR_WIDTH)
+                                            .corner_radius(SENSOR_BAR_CORNER_RADIUS)
                                         );
                                     }
 

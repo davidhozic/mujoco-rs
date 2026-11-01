@@ -28,6 +28,9 @@
   a natural range (for example a quaternion component) also shows a bar.
 - The joint and actuator windows now align their values in a grid with separators, as the sensor
   window does.
+- The quaternion components of a free joint now use sliders, as those of a ball joint do. The joint
+  window no longer shows the rotation angle of a limited ball joint, and it no longer normalizes the
+  quaternion after an edit. MuJoCo normalizes the quaternion in ``qpos`` at the next step.
 
 .. rubric:: New examples
 
@@ -42,8 +45,8 @@
 .. rubric:: Other changes
 
 - The ``actuator_inputs`` example is now
-  :gh-example:`Control windows <visualization/viewer/control_windows.rs>`. Now, the example also shows the
-  sensor window and the equality window uses.
+  :gh-example:`Control windows <visualization/viewer/control_windows.rs>`. Now, the example also
+  shows the sensor window and the equality window.
 - The crates now point to the ``LICENSE`` file instead of the ``MIT OR Apache-2.0`` SPDX
   expression. The file adds a reservation of rights for text and data mining and machine learning
   on top of the MIT or Apache license. Read it before you use the crates.

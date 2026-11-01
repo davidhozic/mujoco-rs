@@ -4,8 +4,7 @@
 //! control inputs, labelled with the input name that MuJoCo reports for the actuator type.
 //!
 //! Open the "Joint" window in the viewer. Each slider writes one position component of the
-//! joint, and a free joint takes a numeric input for each component. A limited ball joint also
-//! shows its rotation angle against the limit.
+//! joint, and a free joint takes a numeric input for each translation component.
 //!
 //! Open the "Sensor" window in the viewer. Each sensor shows one value for each of its
 //! components, labelled with the axis or the quaternion component and the unit of the quantity.
@@ -59,7 +58,7 @@ const EXAMPLE_MODEL: &str = stringify! {
     <body name="dcmotor_passive_arm" pos="1.1 0 .4">
       <joint name="dcmotor_passive_hinge" type="hinge" axis="0 1 0"/>
       <geom fromto="0 0 0 0 0 -.25" rgba=".6 .4 .8 1"/>
-      <site name="dcmotor_passice_arm_site" type="box" size="0.06 0.06 0.06" pos="0 0 -0.25" rgba="0 0 0 0"/>
+      <site name="dcmotor_passive_arm_site" type="box" size="0.06 0.06 0.06" pos="0 0 -0.25" rgba="0 0 0 0"/>
     </body>
 
     <body name="expmap_box" pos="1.8 0 .4">
@@ -120,7 +119,7 @@ const EXAMPLE_MODEL: &str = stringify! {
   </sensor>
 
   <equality>
-    <connect site1="dcmotor_arm_site" site2="dcmotor_passice_arm_site" solref="0.25 1" active="false"/>
+    <connect site1="dcmotor_arm_site" site2="dcmotor_passive_arm_site" solref="0.25 1" active="false"/>
   </equality>
 </mujoco>
 };
