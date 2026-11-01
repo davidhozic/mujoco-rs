@@ -617,10 +617,6 @@ impl ViewerUI {
                             })
                         )
                     }).flatten().collect(), num as usize)
-
-                    // (0..sensor_dim).map(|i| {
-                    //     ComponentDisplayInfo { label: (sensor_dim > 1).then(|| i.to_string()), range: None, unit: "" }
-                    // }).collect()
                 }
 
                 MjtSensor::mjSENS_TACTILE
