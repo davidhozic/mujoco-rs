@@ -41,6 +41,9 @@
 
 .. rubric:: Other changes
 
+- The ``actuator_inputs`` example is now
+  :gh-example:`Control windows <visualization/viewer/control_windows.rs>`. Now, the example also shows the
+  sensor window and the equality window uses.
 - The crates now point to the ``LICENSE`` file instead of the ``MIT OR Apache-2.0`` SPDX
   expression. The file adds a reservation of rights for text and data mining and machine learning
   on top of the MIT or Apache license. Read it before you use the crates.
