@@ -117,6 +117,7 @@ const EXAMPLE_MODEL: &str = stringify! {
     <gyro name="free_gyro" site="free_site"/>
     <clock/>
     <contact name="free_contact" site="free_site" data="found force" num="5"/>
+    <user name="user_sensor" dim="0"/>
   </sensor>
 
   <equality>

@@ -1482,7 +1482,15 @@ impl ViewerUI {
                             .min_col_width(0.0)
                             .show(ui, |ui|
                         {
-                            for (section_i, values) in sensor_data.chunks_exact(components.len()).enumerate() {
+                            // A user sensor can have dim 0; chunks_exact(0) panics,
+                            // but the data is then empty.
+                            if components.len() == 0 {
+                                ui.label("no dimensions");
+                                return;
+                            }
+
+                            let sections = sensor_data.chunks_exact(components.len());
+                            for (section_i, values) in sections.enumerate() {
                                 for (component, value) in components.iter().zip(values) {
                                     if let Some(label) = &component.label {
                                         ui.label(RichText::new(label).font(MAIN_FONT));
