@@ -100,11 +100,12 @@ const FRAME_TYPE_MAP: [&str; 8] = [
 ];
 const _: () = assert!(FRAME_TYPE_MAP.len() == crate::mujoco_c::mjtFrame_::mjNFRAME as usize);
 
+/// Shows the rendering section of the side panel.
 #[expect(
     clippy::too_many_arguments,
     reason = "each parameter is a separately borrowed field of ViewerUI"
 )]
-pub(crate) fn show(
+pub fn show(
     ui: &mut egui::Ui, events: &mut VecDeque<UiEvent>, camera_names: &[String],
     show_tracking_modal: &mut bool, tracking_selected_body: &mut Option<usize>,
     screenshot_viewport_only: &mut bool, screenshot_depth: &mut bool,

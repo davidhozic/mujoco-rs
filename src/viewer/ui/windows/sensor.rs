@@ -53,7 +53,8 @@ const SENSOR_FROMTO_COMPONENTS: [&str; 6] = ["x1", "y1", "z1", "x2", "y2", "z2"]
 /// Names of the components of a `camprojection` sensor, in `sensordata` order.
 const SENSOR_CAMPROJECTION_COMPONENTS: [&str; 2] = ["u", "v"];
 
-pub(crate) fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo> {
+/// Returns the display information of each sensor of `model`, in ID order.
+pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo> {
     (0..model.nsensor() as usize).map(|index| {
         let name = model.id_to_name(MjtObjBase::mjOBJ_SENSOR, index)
             .map(|name| name.to_string())
@@ -169,18 +170,20 @@ pub(crate) fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisp
             MjtSensor::mjSENS_CONTACT => {
                 let [data_bitmask, _, num] = model.sensor_intprm()[index];  // Same as in XML
                 let data_bitmask = data_bitmask as u32;
-                (CONTACT_SENSOR_COMPONENTS.into_iter().filter_map(|(bit, name, unit, subcomponents)| {
-                    (data_bitmask & (1 << *bit as u32) != 0).then(||
+                let components = CONTACT_SENSOR_COMPONENTS.iter()
+                    .filter(|(bit, ..)| data_bitmask & (1 << *bit as u32) != 0)
+                    .flat_map(|&(_, name, unit, subcomponents)| {
                         subcomponents.iter().map(move |subcompoent_name| {
                             let label = if subcompoent_name.is_empty() {
-                                Some(format!("{name}"))
+                                Some(name.to_owned())
                             } else {
                                 Some(format!("{name} ({subcompoent_name})"))
                             };
-                            ComponentDisplayInfo { label, range: None, unit: *unit }
+                            ComponentDisplayInfo { label, range: None, unit }
                         })
-                    )
-                }).flatten().collect(), Some((1..=num).map(|i| format!("num {i}")).collect()))
+                    })
+                    .collect();
+                (components, Some((1..=num).map(|i| format!("num {i}")).collect()))
             }
 
             MjtSensor::mjSENS_TACTILE => return ElementDisplayInfo::NameOnly { name },
@@ -200,7 +203,8 @@ pub(crate) fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisp
     })
 }
 
-pub(crate) fn show(
+/// Shows the sensor window when `open` is set.
+pub fn show(
     ui: &mut egui::Ui, open: &mut bool, sensor_info: &[ElementDisplayInfo],
     shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
 )
@@ -235,7 +239,7 @@ pub(crate) fn show(
                         {
                             // A user sensor can have dim 0; chunks_exact(0) panics,
                             // but the data is then empty.
-                            if components.len() == 0 {
+                            if components.is_empty() {
                                 ui.label(RichText::new("no dimension").font(SECONDARY_FONT));
                                 return;
                             }

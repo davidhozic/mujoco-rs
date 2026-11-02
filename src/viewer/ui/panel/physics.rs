@@ -6,8 +6,8 @@ use egui::RichText;
 
 use crate::viewer::ui::widget_extras::{name_scalar_row, name_array_row};
 use crate::viewer::ui::{HEADING_FONT, MAIN_FONT, MAX_SPAN_WIDTH};
-use crate::wrappers::mj_model::{MjtDisableBit, MjtEnableBit};
 use crate::mujoco_c::{mjNGROUP, mjMINIMP, mjMAXIMP, mjMINMU};
+use crate::wrappers::mj_model::{MjtDisableBit, MjtEnableBit};
 use crate::viewer::ViewerSharedState;
 use crate::util::LockUnpoison;
 use crate::set_flag;
@@ -82,7 +82,8 @@ const ENABLE_FLAGS: &[(&str, MjtEnableBit)] = &[
 ];
 const _: () = assert!(ENABLE_FLAGS.len() == crate::mujoco_c::mjtEnableBit::mjNENABLE as usize);
 
-pub(crate) fn show(ui: &mut egui::Ui, shared_viewer_state: &Arc<Mutex<ViewerSharedState>>) {
+/// Shows the physics section of the side panel.
+pub fn show(ui: &mut egui::Ui, shared_viewer_state: &Arc<Mutex<ViewerSharedState>>) {
     egui::CollapsingHeader::new(RichText::new("Physics").font(HEADING_FONT))
         .show(ui, |ui|
     {

@@ -1,11 +1,12 @@
-//! A submodule of the viewer's UI representing the sensor window definitions.
+//! A submodule of the viewer's UI representing the group window definitions.
 use egui_winit::egui;
 
 use crate::wrappers::mj_visualization::MjvOption;
 use crate::mujoco_c::mjNGROUP;
 use crate::cast_mut_info;
 
-pub(crate) fn show(ui: &mut egui::Ui, open: &mut bool, options: &mut MjvOption) {
+/// Shows the group window when `open` is set.
+pub fn show(ui: &mut egui::Ui, open: &mut bool, options: &mut MjvOption) {
     egui::Window::new("Group")
         .open(open)
         .resizable(false)

@@ -89,7 +89,7 @@ impl<'b> MjBatchRecordBuilder<'b> {
     /// (i.e., less than (1 << [`MjtState::mjNSTATE`])).
     pub fn new(buffer: &'b mut [MjtNum], spec: u32) -> Self {
         assert!(spec < (1 << MjtState::mjNSTATE as u32), "state spec/mask {spec:#x} has an unknown bit");
-        Self { buffer, spec: spec }
+        Self { buffer, spec }
     }
 }
 

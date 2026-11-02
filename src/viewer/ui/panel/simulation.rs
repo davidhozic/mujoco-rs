@@ -6,7 +6,8 @@ use egui::RichText;
 
 use crate::viewer::ui::{UiEvent, HEADING_FONT, MAIN_FONT, BUTTON_ROUNDING};
 
-pub(crate) fn show(ui: &mut egui::Ui, events: &mut VecDeque<UiEvent>) {
+/// Shows the simulation section of the side panel.
+pub fn show(ui: &mut egui::Ui, events: &mut VecDeque<UiEvent>) {
     egui::CollapsingHeader::new(RichText::new("Simulation").font(HEADING_FONT))
         .default_open(true)
         .show(ui, |ui|

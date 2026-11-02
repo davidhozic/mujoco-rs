@@ -9,7 +9,8 @@ use crate::viewer::ViewerSharedState;
 use crate::viewer::ui::MAIN_FONT;
 use crate::util::LockUnpoison;
 
-pub(crate) fn names(model: &MjModel) -> impl Iterator<Item = String> {
+/// Returns the name of each equality of `model`, in ID order.
+pub fn names(model: &MjModel) -> impl Iterator<Item = String> {
     (0..model.neq()).map(|i| {
         if let Some(name) = model.id_to_name(MjtObjBase::mjOBJ_EQUALITY, i as usize) {
             name.to_string()
@@ -17,7 +18,8 @@ pub(crate) fn names(model: &MjModel) -> impl Iterator<Item = String> {
     })
 }
 
-pub(crate) fn show(
+/// Shows the equality window when `open` is set.
+pub fn show(
     ui: &mut egui::Ui, open: &mut bool, equality_names: &[String],
     shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
 )

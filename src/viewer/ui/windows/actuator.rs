@@ -14,7 +14,8 @@ use super::{
     actuator_joint_type
 };
 
-pub(crate) fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo> {
+/// Returns the display information of each actuator of `model`, in ID order.
+pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo> {
     (0..model.nactuator() as usize).map(|idx_actuator| {
         let input_limits = model.actuator_ctrlrange();
         let adr_start = model.actuator_ctrladr()[idx_actuator] as usize;
@@ -65,7 +66,8 @@ pub(crate) fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisp
     })
 }
 
-pub(crate) fn show(
+/// Shows the actuator window when `open` is set.
+pub fn show(
     ui: &mut egui::Ui, open: &mut bool, actuator_info: &[ElementDisplayInfo],
     shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
 )

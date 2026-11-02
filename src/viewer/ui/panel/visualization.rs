@@ -20,7 +20,8 @@ const RANGE_PRECISION_TOLERANCE: f32 = 1e-4;
 const MODEL_VIS_SYNC_WARNING: &str = "[WARNING] Visualization options not synced!";
 const MODEL_STAT_SYNC_WARNING: &str = "[WARNING] Statistics not synced!";
 
-pub(crate) fn show(
+/// Shows the visualization section of the side panel.
+pub fn show(
     ui: &mut egui::Ui, events: &mut VecDeque<UiEvent>,
     shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
 )

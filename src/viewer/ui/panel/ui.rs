@@ -8,11 +8,12 @@ use egui::RichText;
 use crate::viewer::ui::{UiEvent, HEADING_FONT, MAIN_FONT};
 use crate::viewer::ViewerStatusBit;
 
+/// Shows the UI section of the side panel.
 #[expect(
     clippy::too_many_arguments,
     reason = "each parameter is a separately borrowed field of ViewerUI"
 )]
-pub(crate) fn show(
+pub fn show(
     ui: &mut egui::Ui, status: &mut ViewerStatusBit, window: &Window,
     events: &mut VecDeque<UiEvent>, actuator_window: &mut bool, joint_window: &mut bool,
     equality_window: &mut bool, group_window: &mut bool, sensor_window: &mut bool,

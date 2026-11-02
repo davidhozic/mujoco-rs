@@ -18,7 +18,8 @@ use super::{
 /// Value change per point of pointer travel in the numeric input of a joint component.
 const JOINT_INPUT_DRAG_SPEED: f64 = 0.01;
 
-pub(crate) fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo> {
+/// Returns the display information of each joint of `model`, in ID order.
+pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo> {
     (0..model.njnt() as usize).map(|idx_joint| {
         let name = model.id_to_name(MjtObjBase::mjOBJ_JOINT, idx_joint)
             .map(|name| name.to_string())
@@ -65,7 +66,8 @@ pub(crate) fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisp
     })
 }
 
-pub(crate) fn show(
+/// Shows the joint window when `open` is set.
+pub fn show(
     ui: &mut egui::Ui, open: &mut bool, joint_info: &[ElementDisplayInfo],
     shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
 )
