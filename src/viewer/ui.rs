@@ -58,20 +58,14 @@ struct PendingPaint {
 
 /// Viewer user interface context.
 pub(crate) struct ViewerUI {
+    /* Egui-related */
     egui_ctx: egui::Context,
     state: egui_winit::State,
     painter: egui_glow::Painter,
     gl: Arc<egui_glow::glow::Context>,
-    events: VecDeque<UiEvent>,
     pending_paint: Option<PendingPaint>,
-    camera_names: Vec<String>,
-    actuator_info: Vec<ElementDisplayInfo>,
-    joint_info: Vec<ElementDisplayInfo>,
-    sensor_info: Vec<ElementDisplayInfo>,
-    equality_names: Vec<String>,
-    user_ui_callbacks: Vec<UiCallback>,
 
-    // Window toggles.
+    /* Window toggles */
     // Note that these are bool for easier integration with egui.
     // We assumed they won't take up too much extra space, since
     // running multiple viewers isn't what most people will do
@@ -88,11 +82,24 @@ pub(crate) struct ViewerUI {
     show_tracking_modal: bool,
     tracking_selected_body: Option<usize>,
 
-    // Window's search-bar states
+    /* Window's search-bar states */
     actuator_search_bar: SearchBar,
     joint_search_bar: SearchBar,
     sensor_search_bar: SearchBar,
     equality_search_bar: SearchBar,
+
+    /* Model-related */
+    camera_names: Vec<String>,
+    actuator_info: Vec<ElementDisplayInfo>,
+    joint_info: Vec<ElementDisplayInfo>,
+    sensor_info: Vec<ElementDisplayInfo>,
+    equality_names: Vec<String>,
+
+    /* User-related */
+    user_ui_callbacks: Vec<UiCallback>,
+
+    /* Event handling */
+    events: VecDeque<UiEvent>,
 }
 
 impl ViewerUI {
@@ -136,13 +143,13 @@ impl ViewerUI {
             sensor_search_bar: SearchBar::new("Enter sensor's name"),
             equality_search_bar: SearchBar::new("Enter equality's name"),
         };
-        viewer_ui.update_caches(model);
+        viewer_ui.reset_to_model(model);
         Ok(viewer_ui)
     }
 
     /// Rebuilds all model-dependent cached state.
     /// Must be called whenever the active model changes.
-    pub(crate) fn update_caches(&mut self, model: &MjModel) {
+    pub(crate) fn reset_to_model(&mut self, model: &MjModel) {
         self.camera_names = (0..model.ncam()).map(|i| {
             if let Some(name) = model.id_to_name(MjtObjBase::mjOBJ_CAMERA, i as usize) {
                 name.to_string()
@@ -154,9 +161,17 @@ impl ViewerUI {
         self.sensor_info = windows::sensor::display_infos(model).collect();
         self.equality_names = windows::equality::names(model).collect();
 
+        /* Camera tracking state */
         // The pending selection is a body ID of the previous model, which addresses a different
         // body in the new one.
         self.tracking_selected_body = None;
+
+        /* Egui state */
+        self.egui_ctx.memory_mut(|memory| {
+            // Create a new map instead of clearing. This also frees memory.
+            memory.data = Default::default();
+        });
+        self.egui_ctx.clear_animations();
     }
 
     /// Handles winit input events.

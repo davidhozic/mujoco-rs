@@ -1330,8 +1330,10 @@ impl MjViewer {
                 // SAFETY: the GL context was made current in render() before this call.
                 self.context = unsafe { Self::make_render_context(new_model, gl_surface) };
                 self.ncam = new_model.ffi().ncam;
+
                 #[cfg(feature = "viewer-ui")]
-                self.ui.update_caches(new_model);
+                self.ui.reset_to_model(new_model);
+
                 // reload_model already cleared the pending re-upload sets.
 
                 // The scene has been recreated after a model has been changed.
