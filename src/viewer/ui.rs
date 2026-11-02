@@ -147,7 +147,7 @@ impl ViewerUI {
         Ok(viewer_ui)
     }
 
-    /// Rebuilds all model-dependent cached state and discards the egui widget state and animations.
+    /// Rebuilds all model-dependent cached state.
     /// Must be called whenever the active model changes.
     pub(crate) fn reset_to_model(&mut self, model: &MjModel) {
         /* Model caches */
@@ -166,13 +166,6 @@ impl ViewerUI {
         // The pending selection is a body ID of the previous model, which addresses a different
         // body in the new one.
         self.tracking_selected_body = None;
-
-        /* Egui state */
-        self.egui_ctx.memory_mut(|memory| {
-            // Unlike clear(), a new map also frees the table's capacity.
-            memory.data = Default::default();
-        });
-        self.egui_ctx.clear_animations();
     }
 
     /// Handles winit input events.

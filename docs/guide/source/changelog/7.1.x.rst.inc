@@ -35,12 +35,6 @@
   quaternion after an edit. MuJoCo normalizes the quaternion in ``qpos`` at the next step.
 - The actuator, joint, sensor and equality windows now have a search bar. The window shows only
   the elements whose name starts with the search text.
-- A model swap through
-  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model` now discards the
-  `egui <https://docs.rs/egui/0.36.1/egui/>`_ widget state and the data stored in the ``egui``
-  context, so the windows of the new model do not use the state of the old model. This also
-  applies to the widgets of UI callbacks. Store state that must survive a model swap outside the
-  ``egui`` context.
 
 .. rubric:: New examples
 
