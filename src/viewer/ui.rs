@@ -147,9 +147,10 @@ impl ViewerUI {
         Ok(viewer_ui)
     }
 
-    /// Rebuilds all model-dependent cached state.
+    /// Rebuilds all model-dependent cached state and discards the egui widget state and animations.
     /// Must be called whenever the active model changes.
     pub(crate) fn reset_to_model(&mut self, model: &MjModel) {
+        /* Model caches */
         self.camera_names = (0..model.ncam()).map(|i| {
             if let Some(name) = model.id_to_name(MjtObjBase::mjOBJ_CAMERA, i as usize) {
                 name.to_string()
@@ -168,7 +169,7 @@ impl ViewerUI {
 
         /* Egui state */
         self.egui_ctx.memory_mut(|memory| {
-            // Create a new map instead of clearing. This also frees memory.
+            // Unlike clear(), a new map also frees the table's capacity.
             memory.data = Default::default();
         });
         self.egui_ctx.clear_animations();

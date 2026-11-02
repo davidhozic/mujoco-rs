@@ -903,6 +903,9 @@ impl MjViewer {
     /// - lock the shared-state throughout entire callback (but be careful to not create deadlocks) or
     /// - check the model against the expected model with [`MjModel::is_compatible_with_model`].
     ///
+    /// A model swap also discards the egui widget state and the data stored in the egui context,
+    /// including those of the callback's widgets.
+    ///
     /// # Example
     /// ```no_run
     /// # use mujoco_rs::prelude::*;
@@ -1454,6 +1457,7 @@ impl MjViewer {
 
     /// Gains scoped access to [`egui::Context`], which is part of the UI,
     /// for dealing with custom initialization (e.g., loading in images).
+    /// A model swap discards the data stored in the context's memory.
     #[cfg(feature = "viewer-ui")]
     pub fn with_ui_egui_ctx<F>(&mut self, once_fn: F)
         where F: FnOnce(&egui::Context)
