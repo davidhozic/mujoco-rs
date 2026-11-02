@@ -7,6 +7,7 @@ use egui::RichText;
 use crate::wrappers::mj_model::{MjModel, MjtObjBase};
 use crate::viewer::ViewerSharedState;
 use crate::viewer::ui::MAIN_FONT;
+use crate::viewer::ui::widget_extras::SearchBar;
 use crate::util::LockUnpoison;
 
 /// Returns the name of each equality of `model`, in ID order.
@@ -20,16 +21,27 @@ pub fn names(model: &MjModel) -> impl Iterator<Item = String> {
 
 /// Shows the equality window when `open` is set.
 pub fn show(
-    ui: &mut egui::Ui, open: &mut bool, equality_names: &[String],
+    ui: &mut egui::Ui, open: &mut bool, equality_names: &[String], search_bar: &mut SearchBar,
     shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
 )
 {
+    // Clear the text inside the window's search bar when the window is closed.
+    if !*open {
+        search_bar.clear();
+    }
+
     egui::Window::new("Equality")
         .scroll(true)
         .drag_to_scroll(egui::scroll_area::DragScroll::Always)
         .open(open)
         .show(ui, |ui|
     {
+        /* Search bar */
+        let maybe_selected = search_bar.show(
+            ui, equality_names.iter().map(String::as_str)
+        );
+
+        /* Equality widgets */
         ui.horizontal_wrapped(|ui| {
             let mut lock = shared_viewer_state.lock_unpoison();
             if lock.model_reloaded {
@@ -43,7 +55,10 @@ pub fn show(
             for (equality_name, active) in equality_names.iter()
                 .zip(data.eq_active_mut())
             {
-                ui.toggle_value(active, RichText::new(equality_name).font(MAIN_FONT));
+                let toggle_response = ui.toggle_value(active, RichText::new(equality_name).font(MAIN_FONT));
+                if let Some(selected_name) = maybe_selected && selected_name == equality_name {
+                    toggle_response.scroll_to_me(Some(egui::Align::TOP));
+                }
             }
         });
     });

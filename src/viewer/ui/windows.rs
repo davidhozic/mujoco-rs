@@ -57,6 +57,15 @@ pub(super) enum ElementDisplayInfo {
     },
 }
 
+impl ElementDisplayInfo {
+    /// Returns the display name of the element.
+    pub(super) fn name(&self) -> &str {
+        match self {
+            Self::NameOnly { name } | Self::Full { name, .. } => name,
+        }
+    }
+}
+
 fn actuator_joint_type(model: &MjModel, id: usize) -> Option<MjtJoint> {
     match model.actuator_trntype()[id] {
         MjtTrn::mjTRN_SO3 => Some(MjtJoint::mjJNT_BALL),

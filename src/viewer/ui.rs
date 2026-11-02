@@ -19,6 +19,7 @@ use crate::wrappers::mj_model::{MjModel, MjtObjBase};
 use crate::util::LockUnpoison;
 
 use windows::ElementDisplayInfo;
+use widget_extras::SearchBar;
 
 /* UI Fonts */
 const MAIN_FONT: FontId = FontId::proportional(15.0);
@@ -86,6 +87,12 @@ pub(crate) struct ViewerUI {
     // Camera tracking modal state
     show_tracking_modal: bool,
     tracking_selected_body: Option<usize>,
+
+    // Window's search-bar states
+    actuator_search_bar: SearchBar,
+    joint_search_bar: SearchBar,
+    sensor_search_bar: SearchBar,
+    equality_search_bar: SearchBar,
 }
 
 impl ViewerUI {
@@ -124,6 +131,10 @@ impl ViewerUI {
             screenshot_depth: false,
             show_tracking_modal: false,
             tracking_selected_body: None,
+            actuator_search_bar: SearchBar::new("Enter actuator's name"),
+            joint_search_bar: SearchBar::new("Enter joint's name"),
+            sensor_search_bar: SearchBar::new("Enter sensor's name"),
+            equality_search_bar: SearchBar::new("Enter equality's name"),
         };
         viewer_ui.update_caches(model);
         Ok(viewer_ui)
@@ -252,22 +263,26 @@ impl ViewerUI {
             /* Windows */
             // Controls window
             windows::actuator::show(
-                ui, &mut self.actuator_window, &self.actuator_info, shared_viewer_state
+                ui, &mut self.actuator_window, &self.actuator_info, &mut self.actuator_search_bar,
+                shared_viewer_state
             );
 
             // Joints window
             windows::joint::show(
-                ui, &mut self.joint_window, &self.joint_info, shared_viewer_state
+                ui, &mut self.joint_window, &self.joint_info, &mut self.joint_search_bar,
+                shared_viewer_state
             );
 
             // Sensors window
             windows::sensor::show(
-                ui, &mut self.sensor_window, &self.sensor_info, shared_viewer_state
+                ui, &mut self.sensor_window, &self.sensor_info, &mut self.sensor_search_bar,
+                shared_viewer_state
             );
 
             // Equalities window
             windows::equality::show(
-                ui, &mut self.equality_window, &self.equality_names, shared_viewer_state
+                ui, &mut self.equality_window, &self.equality_names, &mut self.equality_search_bar,
+                shared_viewer_state
             );
 
             // Groups window

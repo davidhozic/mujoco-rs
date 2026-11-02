@@ -69,3 +69,61 @@ pub(super) fn name_rgb_row(ui: &mut egui::Ui, name: &str, rgb: &mut [f32; 3]) {
     egui::color_picker::color_edit_button_rgb(ui, rgb);
     ui.end_row();
 }
+
+/// Single-line search field with a popup that lists the names starting with the typed text.
+#[derive(Debug)]
+pub(super) struct SearchBar {
+    text: String,
+    hint_text: String,
+}
+
+impl SearchBar {
+    /// Creates an empty search bar that shows `hint_text` while the field is empty.
+    pub(super) fn new(hint_text: impl Into<String>) -> Self {
+        Self { hint_text: hint_text.into(), text: String::new() }
+    }
+
+    /// Shows the search field and, while it holds text, the popup of matching `names`.
+    /// Returns the name clicked in the popup and then clears the field.
+    pub(super) fn show<'a>(
+        &mut self,
+        ui: &mut egui::Ui,
+        names: impl IntoIterator<Item = &'a str>,
+    ) -> Option<&'a str>
+    {
+        let response = ui.add(egui::TextEdit::singleline(&mut self.text)
+            .hint_text(&self.hint_text)
+        );
+        let id = response.id.with("popup");
+        let selected = egui::Popup::new(
+            id, ui.ctx().clone(), response.rect,
+            egui::LayerId::new(egui::Order::Foreground, id)
+        )
+            .kind(egui::PopupKind::Menu)
+            .open(!self.text.is_empty())
+            .show(|ui|
+        {
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+            let mut matches = names.into_iter()
+                .filter(|name| name.starts_with(self.text.as_str()))
+                .peekable();
+
+            if matches.peek().is_none() {
+                ui.label("No match");
+                return None;
+            }
+            matches.find(|name| ui.button(*name).clicked())
+        })
+            .and_then(|response| response.inner);
+
+        if selected.is_some() {
+            self.text.clear();
+        }
+        selected
+    }
+
+    /// Empties the search field, which also closes the popup.
+    pub(super) fn clear(&mut self) {
+        self.text.clear();
+    }
+}

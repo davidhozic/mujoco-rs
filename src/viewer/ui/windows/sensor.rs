@@ -7,6 +7,7 @@ use egui::RichText;
 
 use crate::wrappers::mj_model::{MjModel, MjtObjBase, MjtJoint, MjtWrap};
 use crate::viewer::ui::{MAIN_FONT, SECONDARY_FONT};
+use crate::viewer::ui::widget_extras::SearchBar;
 use crate::wrappers::{MjtConDataField, MjtSensor};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::viewer::ViewerSharedState;
@@ -205,10 +206,15 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
 
 /// Shows the sensor window when `open` is set.
 pub fn show(
-    ui: &mut egui::Ui, open: &mut bool, sensor_info: &[ElementDisplayInfo],
+    ui: &mut egui::Ui, open: &mut bool, sensor_info: &[ElementDisplayInfo], search_bar: &mut SearchBar,
     shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
 )
 {
+    // Clear the text inside the window's search bar when the window is closed.
+    if !*open {
+        search_bar.clear();
+    }
+
     egui::Window::new("Sensor")
         .open(open)
         .scroll(true)
@@ -220,13 +226,19 @@ pub fn show(
             return;
         }
 
+        /* Search bar */
+        let maybe_selected = search_bar.show(
+            ui, sensor_info.iter().map(ElementDisplayInfo::name)
+        );
+
+        /* Sensor widgets */
         let sensordata = lock.data_passive.sensordata();
         for info in sensor_info {
-            match info {
+            let response = match info {
                 ElementDisplayInfo::NameOnly { name } => {
                     ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
                         ui.label(RichText::new("unsupported").font(SECONDARY_FONT));
-                    });
+                    }).header_response
                 }
                 ElementDisplayInfo::Full { name, adr_start, components, row_names } => {
                     let n_rows = row_names.as_ref().map_or(1, |names| names.len());
@@ -290,8 +302,12 @@ pub fn show(
                                 }
                             }
                         });
-                    });
+                    }).header_response
                 }
+            };
+
+            if let Some(selected_name) = maybe_selected && selected_name == info.name() {
+                response.scroll_to_me(Some(egui::Align::TOP));
             }
         }
     });

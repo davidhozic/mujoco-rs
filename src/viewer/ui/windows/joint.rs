@@ -7,6 +7,7 @@ use egui::RichText;
 
 use crate::wrappers::mj_model::{MjModel, MjtObjBase, MjtJoint};
 use crate::viewer::ui::{MAIN_FONT, SECONDARY_FONT};
+use crate::viewer::ui::widget_extras::SearchBar;
 use crate::viewer::ViewerSharedState;
 use crate::util::LockUnpoison;
 
@@ -68,10 +69,15 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
 
 /// Shows the joint window when `open` is set.
 pub fn show(
-    ui: &mut egui::Ui, open: &mut bool, joint_info: &[ElementDisplayInfo],
+    ui: &mut egui::Ui, open: &mut bool, joint_info: &[ElementDisplayInfo], search_bar: &mut SearchBar,
     shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
 )
 {
+    // Clear the text inside the window's search bar when the window is closed.
+    if !*open {
+        search_bar.clear();
+    }
+
     egui::Window::new("Joint")
         .scroll(true)
         .drag_to_scroll(egui::scroll_area::DragScroll::Always)
@@ -83,12 +89,19 @@ pub fn show(
             return;
         }
         let qpos = lock.data_passive.qpos_mut();
+
+        /* Search bar */
+        let maybe_selected = search_bar.show(
+            ui, joint_info.iter().map(ElementDisplayInfo::name)
+        );
+
+        /* Joint widgets */
         for info in joint_info {
-            match info {
+            let response = match info {
                 ElementDisplayInfo::NameOnly { name } => {
                     ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
                         ui.label(RichText::new("unsupported").font(SECONDARY_FONT));
-                    });
+                    }).header_response
                 }
                 ElementDisplayInfo::Full { name, adr_start, components, .. } => {
                     let joint_qpos = &mut qpos[*adr_start..*adr_start + components.len()];
@@ -124,8 +137,12 @@ pub fn show(
                             }
                             ui.end_row();
                         });
-                    });
+                    }).header_response
                 }
+            };
+
+            if let Some(selected_name) = maybe_selected && selected_name == info.name() {
+                response.scroll_to_me(Some(egui::Align::TOP));
             }
         }
     });
