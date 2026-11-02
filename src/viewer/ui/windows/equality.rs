@@ -37,9 +37,7 @@ pub fn show(
         .show(ui, |ui|
     {
         /* Search bar */
-        let maybe_selected = search_bar.show(
-            ui, equality_names.iter().map(String::as_str)
-        );
+        search_bar.show(ui);
 
         /* Equality widgets */
         ui.horizontal_wrapped(|ui| {
@@ -55,10 +53,11 @@ pub fn show(
             for (equality_name, active) in equality_names.iter()
                 .zip(data.eq_active_mut())
             {
-                let toggle_response = ui.toggle_value(active, RichText::new(equality_name).font(MAIN_FONT));
-                if let Some(selected_name) = maybe_selected && selected_name == equality_name {
-                    toggle_response.scroll_to_me(Some(egui::Align::TOP));
+                if let Some(query) = search_bar.text() && !equality_name.starts_with(query) {
+                    continue;
                 }
+
+                ui.toggle_value(active, RichText::new(equality_name).font(MAIN_FONT));
             }
         });
     });

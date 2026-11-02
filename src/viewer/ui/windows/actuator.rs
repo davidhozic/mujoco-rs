@@ -91,17 +91,19 @@ pub fn show(
         let ctrl_mut = lock.data_passive.ctrl_mut();
 
         /* Search bar */
-        let maybe_selected = search_bar.show(
-            ui, actuator_info.iter().map(ElementDisplayInfo::name)
-        );
+        search_bar.show(ui);
 
         /* Actuator widgets */
         for info in actuator_info {
-            let response = match info {
+            if let Some(query) = search_bar.text() && !info.name().starts_with(query) {
+                continue;
+            }
+
+            match info {
                 ElementDisplayInfo::NameOnly { name } => {
                     ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
                         ui.label(RichText::new("unsupported").font(SECONDARY_FONT));
-                    }).header_response
+                    });
                 }
                 ElementDisplayInfo::Full { name, adr_start, components, .. } => {
                     let actuator_ctrl = &mut ctrl_mut[*adr_start..*adr_start + components.len()];
@@ -130,12 +132,8 @@ pub fn show(
                             }
                             ui.end_row();
                         });
-                    }).header_response
+                    });
                 }
-            };
-
-            if let Some(selected_name) = maybe_selected && selected_name == info.name() {
-                response.scroll_to_me(Some(egui::Align::TOP));
             }
         }
 

@@ -33,8 +33,8 @@
 - The quaternion components of a free joint now use sliders, as those of a ball joint do. The joint
   window no longer shows the rotation angle of a limited ball joint, and it no longer normalizes the
   quaternion after an edit. MuJoCo normalizes the quaternion in ``qpos`` at the next step.
-- The actuator, joint, sensor and equality windows now have a search bar. A click on a matching
-  name scrolls the window to that element.
+- The actuator, joint, sensor and equality windows now have a search bar. The window shows only
+  the elements whose name starts with the search text.
 
 .. rubric:: New examples
 
