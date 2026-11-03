@@ -1911,29 +1911,28 @@ impl MjViewer {
                         (y - rect.bottom as MjtNum) / rect.height as MjtNum
                     );
 
-                    // Set tracking camera
-                    if modifier_state.alt_key() {
-                        if let Some(body_id) = sel.body_id {
-                            self.camera.lookat = sel.point;
-                            if modifier_state.control_key() {
-                                self.camera.track(body_id);
-                            }
+                    // Either track, do nothing, change the look-at point or change the selected target.
+                    let (ctrl, alt) = (modifier_state.control_key(), modifier_state.alt_key());
+                    if let Some(body_id) = sel.body_id {
+                        match (ctrl, alt) {
+                            (true, true) => self.camera.track(body_id),  // ctrl + alt
+                            (true, false) => {}  // ctrl
+                            (false, true) => self.camera.lookat = sel.point,  // alt
+                            (false, false) => {  // no ctrl, no alt
+                                pert.select = body_id as i32;
+                                pert.flexselect = sel.flex_id.map(|v| v as i32).unwrap_or(-1);
+                                pert.skinselect = sel.skin_id.map(|v| v as i32).unwrap_or(-1);
+                                pert.active = 0;
+                                pert.update_local_pos(&sel.point, data_passive);
+                            },
                         }
                     }
-                    else {
-                        // Mark selection
-                        if let Some(body_id) = sel.body_id {
-                            pert.select = body_id as i32;
-                            pert.flexselect = sel.flex_id.map(|v| v as i32).unwrap_or(-1);
-                            pert.skinselect = sel.skin_id.map(|v| v as i32).unwrap_or(-1);
-                            pert.active = 0;
-                            pert.update_local_pos(&sel.point, data_passive);
-                        }
-                        else {
-                            pert.select = -1;
-                            pert.flexselect = -1;
-                            pert.skinselect = -1;
-                        }
+                    // Reset perturbation.
+                    else if !(ctrl || alt) {
+                        pert.select = -1;
+                        pert.flexselect = -1;
+                        pert.skinselect = -1;
+                        pert.active = 0;
                     }
                 }
                 self.last_bnt_press_time = Instant::now();
