@@ -8,7 +8,7 @@ use egui::RichText;
 use crate::wrappers::mj_model::{MjModel, MjtObjBase, MjtJoint, MjtWrap};
 use crate::viewer::ui::{MAIN_FONT, SECONDARY_FONT};
 use crate::viewer::ui::widget_extras::SearchBar;
-use crate::wrappers::{MjtConDataField, MjtSensor};
+use crate::wrappers::{MjtConDataField, MjtRayDataField, MjtSensor};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::viewer::ViewerSharedState;
 use crate::util::LockUnpoison;
@@ -21,32 +21,47 @@ use super::{
 const SENSOR_BAR_WIDTH: f32 = 75.0;
 const SENSOR_BAR_CORNER_RADIUS: u8 = 3;
 
-/// Maps MuJoCo contact sensor components to a readable name, the physical unit and sub component
-/// axis names of the component.
-const CONTACT_SENSOR_COMPONENTS: &[(MjtConDataField, &str, &str, &[&str])] = &[
-    (MjtConDataField::mjCONDATA_FOUND,   "found",   " contacts", &[""]),
-    (MjtConDataField::mjCONDATA_FORCE,   "force",   " N",        &XYZ_COMPONENTS),
-    (MjtConDataField::mjCONDATA_TORQUE,  "torque",  " N m",      &XYZ_COMPONENTS),
-    (MjtConDataField::mjCONDATA_DIST,    "dist",    " m",        &[""]),
-    (MjtConDataField::mjCONDATA_POS,     "pos",     " m",        &XYZ_COMPONENTS),
-    (MjtConDataField::mjCONDATA_NORMAL,  "normal",  "",          &XYZ_COMPONENTS),
-    (MjtConDataField::mjCONDATA_TANGENT, "tangent", "",          &XYZ_COMPONENTS),
-    (MjtConDataField::mjCONDATA_LINVEL,  "linvel",  " m/s",      &XYZ_COMPONENTS),
-    (MjtConDataField::mjCONDATA_ANGVEL,  "angvel",  " rad/s",    &XYZ_COMPONENTS),
-];
-
-/// Ensures, at compile-time, that information inside [`CONTACT_SENSOR_COMPONENTS`] is not stale.
-const fn check_contact_sensor_components() {
-    let mut i = 0;
-    assert!(CONTACT_SENSOR_COMPONENTS.len() ==  MjtConDataField::mjNCONDATA as usize);
-    while i < CONTACT_SENSOR_COMPONENTS.len() {
-        let e_type = CONTACT_SENSOR_COMPONENTS[i].0;
-        assert!(e_type as usize == i);
-        i += 1;
-    }
+/// Ensures, at compile-time, that information inside sensor types with multiple data fields and variants is not stale.
+macro_rules! check_sensor_components {
+    ($components:expr, $len:expr) => {
+        const _: () = const {
+            let mut i = 0;
+            assert!($components.len() ==  $len as usize);
+            while i < $components.len() {
+                let e_type = $components[i].0;
+                assert!(e_type as usize == i);
+                i += 1;
+            }       
+        };
+    };
 }
 
-const _: () = check_contact_sensor_components();
+/// Maps MuJoCo contact sensor components to a readable name, the physical unit and sub component
+/// axis names of the component.
+const CONTACT_SENSOR_COMPONENTS: &[(u32, &str, &str, &[&str])] = &[
+    (MjtConDataField::mjCONDATA_FOUND as u32,   "found",   " contacts", &[""]),
+    (MjtConDataField::mjCONDATA_FORCE as u32,   "force",   " N",        &XYZ_COMPONENTS),
+    (MjtConDataField::mjCONDATA_TORQUE as u32,  "torque",  " N m",      &XYZ_COMPONENTS),
+    (MjtConDataField::mjCONDATA_DIST as u32,    "dist",    " m",        &[""]),
+    (MjtConDataField::mjCONDATA_POS as u32,     "pos",     " m",        &XYZ_COMPONENTS),
+    (MjtConDataField::mjCONDATA_NORMAL as u32,  "normal",  "",          &XYZ_COMPONENTS),
+    (MjtConDataField::mjCONDATA_TANGENT as u32, "tangent", "",          &XYZ_COMPONENTS),
+    (MjtConDataField::mjCONDATA_LINVEL as u32,  "linvel",  " m/s",      &XYZ_COMPONENTS),
+    (MjtConDataField::mjCONDATA_ANGVEL as u32,  "angvel",  " rad/s",    &XYZ_COMPONENTS),
+];
+check_sensor_components!(CONTACT_SENSOR_COMPONENTS, MjtConDataField::mjNCONDATA);
+
+/// Maps MuJoCo rangefinder sensor components to a readable name, the physical unit and sub component
+/// axis names of the component.
+const RANGEFINDER_SENSOR_COMPONENTS: &[(u32, &str, &str, &[&str])] = &[
+    (MjtRayDataField::mjRAYDATA_DIST as u32,   "distance", " meters", &[""]),
+    (MjtRayDataField::mjRAYDATA_DIR as u32,    "dir",      "",        &XYZ_COMPONENTS),
+    (MjtRayDataField::mjRAYDATA_ORIGIN as u32, "origin",   " meters", &XYZ_COMPONENTS),
+    (MjtRayDataField::mjRAYDATA_POINT as u32,  "point",    " meters", &XYZ_COMPONENTS),
+    (MjtRayDataField::mjRAYDATA_NORMAL as u32, "normal",   "",        &XYZ_COMPONENTS),
+    (MjtRayDataField::mjRAYDATA_DEPTH as u32,  "depth",    " meters", &[""]),
+];
+check_sensor_components!(RANGEFINDER_SENSOR_COMPONENTS, MjtRayDataField::mjNRAYDATA);
 
 /// Names of the components of a `geomfromto` sensor, in `sensordata` order.
 const SENSOR_FROMTO_COMPONENTS: [&str; 6] = ["x1", "y1", "z1", "x2", "y2", "z2"];
@@ -56,19 +71,19 @@ const SENSOR_CAMPROJECTION_COMPONENTS: [&str; 2] = ["u", "v"];
 
 /// Returns the display information of each sensor of `model`, in ID order.
 pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo> {
-    (0..model.nsensor() as usize).map(|index| {
-        let name = model.id_to_name(MjtObjBase::mjOBJ_SENSOR, index)
+    (0..model.nsensor() as usize).map(|sensor_id| {
+        let name = model.id_to_name(MjtObjBase::mjOBJ_SENSOR, sensor_id)
             .map(|name| name.to_string())
-            .unwrap_or_else(|| format!("Sensor {index}"));
+            .unwrap_or_else(|| format!("Sensor {sensor_id}"));
 
-        let adr_start = model.sensor_adr()[index] as usize;
+        let adr_start = model.sensor_adr()[sensor_id] as usize;
 
-        let sensor_type = model.sensor_type()[index];
-        let sensor_dim = model.sensor_dim()[index] as usize;
+        let sensor_type = model.sensor_type()[sensor_id];
+        let sensor_dim = model.sensor_dim()[sensor_id] as usize;
 
         // A joint sensor measures a length on a slide joint and an angle on a hinge or ball joint.
-        let objid = model.sensor_objid()[index] as usize;
-        let objtype = model.sensor_objtype()[index];
+        let objid = model.sensor_objid()[sensor_id] as usize;
+        let objtype = model.sensor_objtype()[sensor_id];
         let is_slide = objtype == MjtObjBase::mjOBJ_JOINT && model.jnt_type()[objid] == MjtJoint::mjJNT_SLIDE;
         // A fixed tendon combines joint coordinates, so its unit depends on the joints and coefficients.
         let is_spatial_tendon = objtype == MjtObjBase::mjOBJ_TENDON
@@ -78,15 +93,15 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
             let components = labels.iter().map(|&label| {
                 ComponentDisplayInfo { label: Some(label.to_owned()), range: range.clone(), unit }
             }).collect::<Box<[_]>>();
-            (components, None)
+            Box::new([(None, components)])
         };
-        let scalar = |(unit, range)| -> (Box<[_]>, Option<Box<[String]>>) {
-            (Box::new([ComponentDisplayInfo { label: None, range, unit }]), None)
+        let scalar = |(unit, range)| -> Box<[(Option<String>, Box<[_]>)]> {
+            Box::new([(None, Box::new([ComponentDisplayInfo { label: None, range, unit }]))])
         };
         let xyz = |unit| labelled(&XYZ_COMPONENTS, None, unit);
         let unit_xyz = || labelled(&XYZ_COMPONENTS, Some(-1.0..=1.0), "");
 
-        let (components, row_names) = match sensor_type {
+        let components = match sensor_type {
             MjtSensor::mjSENS_TOUCH => scalar((" N", None)),
             MjtSensor::mjSENS_ACCELEROMETER => xyz(" m/s^2"),
             MjtSensor::mjSENS_VELOCIMETER => xyz(" m/s"),
@@ -98,7 +113,7 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
             MjtSensor::mjSENS_CAMPROJECTION => labelled(&SENSOR_CAMPROJECTION_COMPONENTS, None, " px"),
 
             MjtSensor::mjSENS_JOINTPOS => {
-                let jnt_id = model.sensor_objid()[index] as usize;
+                let jnt_id = model.sensor_objid()[sensor_id] as usize;
                 let range = model.jnt_limited()[jnt_id]
                     .then(|| { let [l, r] = model.jnt_range()[jnt_id]; l..=r });
                 scalar((if is_slide { " m" } else { " rad" }, range))
@@ -155,36 +170,37 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
             MjtSensor::mjSENS_SUBTREEANGMOM => xyz(" kg m^2/s"),
 
             // An "enclosed" sensor gives a signed distance to the site boundary.
-            MjtSensor::mjSENS_INSIDESITE if model.sensor_intprm()[index][0] != 0 => scalar((" m", None)),
+            MjtSensor::mjSENS_INSIDESITE if model.sensor_intprm()[sensor_id][0] != 0 => scalar((" m", None)),
             MjtSensor::mjSENS_INSIDESITE => scalar(("", Some(0.0..=1.0))),
             MjtSensor::mjSENS_GEOMDIST => scalar((" m", None)),
             MjtSensor::mjSENS_GEOMFROMTO => labelled(&SENSOR_FROMTO_COMPONENTS, None, " m"),
             MjtSensor::mjSENS_E_POTENTIAL | MjtSensor::mjSENS_E_KINETIC => scalar((" J", None)),
             MjtSensor::mjSENS_CLOCK => scalar((" s", None)),
 
-            // A rangefinder without "dir" and "normal" outputs only lengths.
-            MjtSensor::mjSENS_RANGEFINDER =>
-            {
-                todo!("Implementation of rangefinder case. TO AI: DO NOT EDIT!")
-            }
+            MjtSensor::mjSENS_RANGEFINDER => {
+                let data_bitmask = model.sensor_intprm()[sensor_id][0];
+                let components = RANGEFINDER_SENSOR_COMPONENTS.iter()
+                    .filter(|(bit, ..)| data_bitmask & (1 << *bit) != 0);
 
+                // TODO: move ranges into the components array.
+                components.map(|(_, data_name, unit, subcomponents)| {
+                    (Some(data_name.to_string()), subcomponents.iter().map(|sub_name| 
+                        ComponentDisplayInfo{ label: Some(sub_name.to_string()), range: None, unit }
+                    ).collect())
+                }).collect()
+            }
             MjtSensor::mjSENS_CONTACT => {
-                let [data_bitmask, _, num] = model.sensor_intprm()[index];  // Same as in XML
-                let data_bitmask = data_bitmask as u32;
+                let data_bitmask = model.sensor_intprm()[sensor_id][0];
                 let components = CONTACT_SENSOR_COMPONENTS.iter()
-                    .filter(|(bit, ..)| data_bitmask & (1 << *bit as u32) != 0)
-                    .flat_map(|&(_, name, unit, subcomponents)| {
-                        subcomponents.iter().map(move |subcompoent_name| {
-                            let label = if subcompoent_name.is_empty() {
-                                Some(name.to_owned())
-                            } else {
-                                Some(format!("{name} ({subcompoent_name})"))
-                            };
-                            ComponentDisplayInfo { label, range: None, unit }
-                        })
+                    .filter(|(bit, ..)| data_bitmask & (1 << *bit) != 0);
+
+                // TODO: move ranges into the components array.
+                Box::new([(None, components.flat_map(|(_, data_name, unit, subcomponents)| {
+                    subcomponents.iter().map(move |sub_name| {
+                        let label = if sub_name.is_empty() { data_name.to_string() } else { format!("{data_name} ({sub_name})") };
+                        ComponentDisplayInfo{ label: Some(label), range: None, unit }
                     })
-                    .collect();
-                (components, Some((1..=num).map(|i| format!("num {i}")).collect()))
+                }).collect())])
             }
 
             MjtSensor::mjSENS_TACTILE => return ElementDisplayInfo::NameOnly { name },
@@ -194,13 +210,26 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
                 let components = (0..sensor_dim).map(|i| {
                     ComponentDisplayInfo { label: (sensor_dim > 1).then(|| i.to_string()), range: None, unit: "" }
                 }).collect();
-                (components, None)
+                Box::new([(None, components)])
             }
         };
 
-        let n_rows = row_names.as_ref().map_or(1, |names| names.len());
-        debug_assert_eq!(components.len() * n_rows, sensor_dim, "unexpected dimension of sensor type {sensor_type:?}");
-        ElementDisplayInfo::Full { name, adr_start, components, row_names }
+        let n_replicate = match sensor_type {
+            MjtSensor::mjSENS_RANGEFINDER => {
+                if model.sensor_objtype()[sensor_id] == MjtObjBase::mjOBJ_SITE {
+                    1
+                } else {  // camera
+                    let cam_id = model.sensor_objid()[sensor_id] as usize;
+                    let [width, height] = model.cam_resolution()[cam_id];
+                    width as usize * height as usize
+                }
+            }
+            MjtSensor::mjSENS_CONTACT => model.sensor_intprm()[sensor_id][2] as usize,
+            _ => 1
+        };
+        let n_components = components.iter().map(|(_, row)| row.len()).sum::<usize>();
+        debug_assert_eq!(n_components * n_replicate, sensor_dim, "unexpected dimension of sensor type {sensor_type:?}");
+        ElementDisplayInfo::Full { name, adr_start, components, n_replicate }
     })
 }
 
@@ -242,9 +271,10 @@ pub fn show(
                         ui.label(RichText::new("unsupported").font(SECONDARY_FONT));
                     });
                 }
-                ElementDisplayInfo::Full { name, adr_start, components, row_names } => {
-                    let n_rows = row_names.as_ref().map_or(1, |names| names.len());
-                    let sensor_data = &sensordata[*adr_start..*adr_start + components.len() * n_rows];
+                ElementDisplayInfo::Full { name, adr_start, components, n_replicate } => {
+                    let n_rows = components.len() * *n_replicate;
+                    let n_components = components.iter().map(|(_, row)| row.len()).sum::<usize>();
+                    let sensor_data = &sensordata[*adr_start..*adr_start + n_components * *n_replicate];
                     ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
                         egui::Grid::new("sensor_data_ui_grid")
                             .spacing(egui::vec2(INSPECTOR_GRID_SPACING_X, INSPECTOR_GRID_SPACING_Y))
@@ -253,18 +283,18 @@ pub fn show(
                         {
                             // A user sensor can have dim 0; chunks_exact(0) panics,
                             // but the data is then empty.
-                            if components.is_empty() {
+                            if n_components == 0 {
                                 ui.label(RichText::new("no dimension").font(SECONDARY_FONT));
                                 return;
                             }
 
-                            let sections = sensor_data.chunks_exact(components.len());
-                            for (section_i, values) in sections.enumerate() {
-                                if let Some(names) = row_names {
-                                    ui.label(RichText::new(&names[section_i]).font(SECONDARY_FONT));
+                            let mut values = sensor_data.iter();
+                            for (row_i, (row_name, row)) in components.iter().cycle().take(n_rows).enumerate() {
+                                if let Some(row_name) = row_name {
+                                    ui.label(RichText::new(row_name).font(SECONDARY_FONT));
                                 }
 
-                                for (component, value) in components.iter().zip(values) {
+                                for (component, value) in row.iter().zip(values.by_ref()) {
                                     if let Some(label) = &component.label {
                                         ui.label(RichText::new(label).font(SECONDARY_FONT));
                                     }
@@ -297,7 +327,7 @@ pub fn show(
                                 ui.end_row();
 
                                 // Add separator between rows
-                                if section_i < n_rows - 1 {
+                                if row_i < n_rows - 1 {
                                     let y = ui.min_rect().bottom() + INSPECTOR_GRID_SPACING_Y / 2.0;
                                     let stroke = ui.visuals().widgets.noninteractive.bg_stroke;
                                     ui.painter().hline(ui.max_rect().x_range(), y, stroke);

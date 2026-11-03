@@ -63,7 +63,7 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
                 ComponentDisplayInfo { label, range: Some(range), unit }
             }).collect();
 
-        ElementDisplayInfo::Full { name, adr_start, components, row_names: None }
+        ElementDisplayInfo::Full { name, adr_start, components: Box::new([(None, components)]), n_replicate: 1 }
     })
 }
 
@@ -106,6 +106,7 @@ pub fn show(
                     });
                 }
                 ElementDisplayInfo::Full { name, adr_start, components, .. } => {
+                    let components = &components[0].1;
                     let actuator_ctrl = &mut ctrl_mut[*adr_start..*adr_start + components.len()];
                     ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
                         if components.is_empty() {

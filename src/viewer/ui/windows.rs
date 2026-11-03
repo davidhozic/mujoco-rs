@@ -50,10 +50,13 @@ pub(super) enum ElementDisplayInfo {
         /// or `sensordata`).
         adr_start: usize,
         /// Display information of each component of one row, in data array order.
-        components: Box<[ComponentDisplayInfo]>,
-        /// Name of each row. The data array holds `components` once per row; [`None`] means one
-        /// unnamed row.
-        row_names: Option<Box<[String]>>,
+        /// The subboxes represent rows (name, components).
+        components: Box<[
+            (Option<String>, Box<[ComponentDisplayInfo]>)
+        ]>,
+        /// Number of repetitions of the initial elements inside `components`. There will be `n_replicate` of
+        /// `components` created.
+        n_replicate: usize,
     },
 }
 
