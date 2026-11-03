@@ -30,6 +30,11 @@
 - :gh-example:`Batched simulation <simulation/batched.rs>` --- runs many simulations in parallel
   using :docs-rs:`~mujoco_rs::wrappers::mj_batch::<struct>MjBatch`.
 
+.. rubric:: Bug fixes
+
+- The viewer no longer panics on a drag after a ctrl-double-click over the sky. Additionally, the
+  selection is now not cleared when double-clicking over the sky whilst ctrl or alt key is pressed.
+
 .. rubric:: Other changes
 
 - The crates now point to the ``LICENSE`` file instead of the ``MIT OR Apache-2.0`` SPDX
