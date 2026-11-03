@@ -39,7 +39,10 @@ const EXAMPLE_MODEL: &str = stringify! {
   </default>
 
   <worldbody>
-    <camera name="lidar-array" pos="6.015 -0.021 1.652" xyaxes="-0.029 1.000 0.000 -0.279 -0.008 0.960" resolution="5 5" fovy="5"/>
+    <camera
+        name="lidar-array" pos="4.604 0.369 1.329" xyaxes="-0.232 0.973 -0.000 -0.761 -0.181 0.622"
+        resolution="10 10"
+    />
 
     <light pos="0 -.6 3" dir="0 .2 -1" diffuse=".8 .8 .8"/>
     <geom name="floor" type="plane" size="0 0 .05" rgba=".3 .35 .4 1"/>
@@ -62,7 +65,7 @@ const EXAMPLE_MODEL: &str = stringify! {
     <body name="dcmotor_arm" pos=".4 0 .4">
       <joint name="dcmotor_hinge" type="hinge" axis="0 1 0"/>
       <geom fromto="0 0 0 0 0 -.25" rgba=".9 .7 .2 1"/>
-      <site name="dcmotor_arm_site" type="box" size="0.06 0.06 0.06" pos="0 0 -0.25" euler="90 0 0"/>
+      <site name="dcmotor_arm_site" type="box" size="0.06 0.06 0.06" pos="0 0 -0.25" rgba="0 0 0 0"/>
     </body>
 
     <body name="dcmotor_passive_arm" pos="1.1 0 .4">
@@ -141,7 +144,6 @@ const EXAMPLE_MODEL: &str = stringify! {
     <gyro name="free_gyro" site="free_site"/>
     <contact name="free_contact" site="free_site" data="found force" num="5"/>
     <tactile geom="gear1_geom" mesh="gear_tooth"/>
-
     <rangefinder name="rangefinder_numero1" camera="lidar-array" data="dist normal"/>
 
     // TODO: Uncomment when MuJoCo fixes the bug. There seems to be some issue with wrong replication when using
