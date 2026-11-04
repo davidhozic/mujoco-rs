@@ -43,28 +43,28 @@ macro_rules! check_sensor_components {
 
 /// Maps MuJoCo contact sensor components to a readable name, the physical unit and sub component
 /// axis names of the component.
-const CONTACT_SENSOR_COMPONENTS: &[(u32, &str, &str, &[&str])] = &[
-    (MjtConDataField::mjCONDATA_FOUND as u32,   "found",   " contacts", &[""]),
-    (MjtConDataField::mjCONDATA_FORCE as u32,   "force",   " N",        &XYZ_COMPONENTS),
-    (MjtConDataField::mjCONDATA_TORQUE as u32,  "torque",  " N m",      &XYZ_COMPONENTS),
-    (MjtConDataField::mjCONDATA_DIST as u32,    "dist",    " m",        &[""]),
-    (MjtConDataField::mjCONDATA_POS as u32,     "pos",     " m",        &XYZ_COMPONENTS),
-    (MjtConDataField::mjCONDATA_NORMAL as u32,  "normal",  "",          &XYZ_COMPONENTS),
-    (MjtConDataField::mjCONDATA_TANGENT as u32, "tangent", "",          &XYZ_COMPONENTS),
-    (MjtConDataField::mjCONDATA_LINVEL as u32,  "linvel",  " m/s",      &XYZ_COMPONENTS),
-    (MjtConDataField::mjCONDATA_ANGVEL as u32,  "angvel",  " rad/s",    &XYZ_COMPONENTS),
+const CONTACT_SENSOR_COMPONENTS: &[(u32, &str, &str, &[&str], Option<RangeInclusive<MjtNum>>)] = &[
+    (MjtConDataField::mjCONDATA_FOUND as u32,   "found",   " contacts", &[""],          None),
+    (MjtConDataField::mjCONDATA_FORCE as u32,   "force",   " N",        &XYZ_COMPONENTS, None),
+    (MjtConDataField::mjCONDATA_TORQUE as u32,  "torque",  " N m",      &XYZ_COMPONENTS, None),
+    (MjtConDataField::mjCONDATA_DIST as u32,    "dist",    " m",        &[""],          None),
+    (MjtConDataField::mjCONDATA_POS as u32,     "pos",     " m",        &XYZ_COMPONENTS, None),
+    (MjtConDataField::mjCONDATA_NORMAL as u32,  "normal",  "",          &XYZ_COMPONENTS, Some(-1.0..=1.0)),
+    (MjtConDataField::mjCONDATA_TANGENT as u32, "tangent", "",          &XYZ_COMPONENTS, Some(-1.0..=1.0)),
+    (MjtConDataField::mjCONDATA_LINVEL as u32,  "linvel",  " m/s",      &XYZ_COMPONENTS, None),
+    (MjtConDataField::mjCONDATA_ANGVEL as u32,  "angvel",  " rad/s",    &XYZ_COMPONENTS, None),
 ];
 check_sensor_components!(CONTACT_SENSOR_COMPONENTS, MjtConDataField::mjNCONDATA);
 
 /// Maps MuJoCo rangefinder sensor components to a readable name, the physical unit and sub component
 /// axis names of the component.
-const RANGEFINDER_SENSOR_COMPONENTS: &[(u32, &str, &str, &[&str])] = &[
-    (MjtRayDataField::mjRAYDATA_DIST as u32,   "distance", " m", &[""]),
-    (MjtRayDataField::mjRAYDATA_DIR as u32,    "dir",      "",   &XYZ_COMPONENTS),
-    (MjtRayDataField::mjRAYDATA_ORIGIN as u32, "origin",   " m", &XYZ_COMPONENTS),
-    (MjtRayDataField::mjRAYDATA_POINT as u32,  "point",    " m", &XYZ_COMPONENTS),
-    (MjtRayDataField::mjRAYDATA_NORMAL as u32, "normal",   "",   &XYZ_COMPONENTS),
-    (MjtRayDataField::mjRAYDATA_DEPTH as u32,  "depth",    " m", &[""]),
+const RANGEFINDER_SENSOR_COMPONENTS: &[(u32, &str, &str, &[&str], Option<RangeInclusive<MjtNum>>)] = &[
+    (MjtRayDataField::mjRAYDATA_DIST as u32,   "distance", " m", &[""],          None),
+    (MjtRayDataField::mjRAYDATA_DIR as u32,    "dir",      "",   &XYZ_COMPONENTS, Some(-1.0..=1.0)),
+    (MjtRayDataField::mjRAYDATA_ORIGIN as u32, "origin",   " m", &XYZ_COMPONENTS, None),
+    (MjtRayDataField::mjRAYDATA_POINT as u32,  "point",    " m", &XYZ_COMPONENTS, None),
+    (MjtRayDataField::mjRAYDATA_NORMAL as u32, "normal",   "",   &XYZ_COMPONENTS, Some(-1.0..=1.0)),
+    (MjtRayDataField::mjRAYDATA_DEPTH as u32,  "depth",    " m", &[""],          None),
 ];
 check_sensor_components!(RANGEFINDER_SENSOR_COMPONENTS, MjtRayDataField::mjNRAYDATA);
 
@@ -232,15 +232,19 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
 }
 
 /// Returns the display information of each component in `table` whose bit is set in `data_bitmask`.
-fn bitmask_components(table: &[(u32, &str, &'static str, &'static [&'static str])], data_bitmask: i32) -> Box<[ComponentDisplayInfo]> {
-    // TODO: move ranges into the components array.
+fn bitmask_components(
+    table: &[(u32, &str, &'static str, &'static [&'static str], Option<RangeInclusive<MjtNum>>)],
+    data_bitmask: i32
+)
+    -> Box<[ComponentDisplayInfo]>
+{
     table.iter()
         .filter(|(bit, ..)| data_bitmask & (1 << *bit) != 0)
-        .map(|(_, data_name, unit, subcomponents)| {
+        .map(|(_, data_name, unit, subcomponents, range)| {
             ComponentDisplayInfo {
                 name: data_name.to_string(),
                 unit,
-                range: None,
+                range: range.clone(),
                 sub_component_names: subcomponents,
             }
         }).collect()
