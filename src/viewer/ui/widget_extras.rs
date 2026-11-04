@@ -17,9 +17,11 @@ pub(super) fn name_scalar_row<Num: egui::emath::Numeric>(
 {
     ui.label(name);
     ui.horizontal_top(|ui| {
+        // Clamp only the user's edits, otherwise egui rewrites a value that was set out of range
+        // by the user, even if technically valid (e.g., some floating-point values).
         ui.add_sized(
             [ui.available_width().min(MAX_SPAN_WIDTH), ui.spacing().interact_size.y],
-            egui::DragValue::new(value).speed(speed).range(range)
+            egui::DragValue::new(value).speed(speed).range(range).clamp_existing_to_range(false)
         )
     });
     ui.end_row();
@@ -47,7 +49,7 @@ pub(super) fn name_array_row<const NUM_VALUES: usize, Num: egui::emath::Numeric>
         for (i, value) in values.iter_mut().enumerate() {
             let mut drag = egui::DragValue::new(value).speed(speed);
             if let Some(ranges) = ranges {
-                drag = drag.range(ranges[i].clone());
+                drag = drag.range(ranges[i].clone()).clamp_existing_to_range(false);
             }
 
             ui.add_sized([per_element_width, interact_height], drag);

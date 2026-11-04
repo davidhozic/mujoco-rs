@@ -272,10 +272,10 @@ pub fn show(
             ui.separator();
             egui::Grid::new("tree_flex_slide").show(ui, |ui| {
                 ui.label("Tree depth");
-                ui.add(egui::Slider::new(&mut options.bvh_depth, 0..=20));
+                ui.add(egui::Slider::new(&mut options.bvh_depth, 0..=20).clamping(egui::SliderClamping::Edits));
                 ui.end_row();
                 ui.label("Flex layer");
-                ui.add(egui::Slider::new(&mut options.flex_layer, 0..=10));
+                ui.add(egui::Slider::new(&mut options.flex_layer, 0..=10).clamping(egui::SliderClamping::Edits));
             });
         });
 
