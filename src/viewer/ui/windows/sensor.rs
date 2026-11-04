@@ -23,7 +23,7 @@ const SENSOR_BAR_WIDTH: f32 = 75.0;
 /// Corner radius of the bar of a sensor value with a natural range, in points.
 const SENSOR_BAR_CORNER_RADIUS: u8 = 3;
 
-/// Maximum number of widgets that an element shows on one page.
+/// Initial number of widgets that an element shows on one page.
 pub const MAX_WIDGETS_PER_ELEMENT: usize = 20;
 
 /// Ensures, at compile-time, that information inside sensor types with multiple data fields and variants is not stale.

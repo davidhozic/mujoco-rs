@@ -1,6 +1,7 @@
 //! A submodule of the viewer's UI holding extra widget creation helpers.
 use std::ops::RangeInclusive;
 
+use egui::ecolor::{gamma_from_linear, linear_from_gamma};
 use egui::color_picker::Alpha;
 use egui_winit::egui;
 
@@ -61,15 +62,33 @@ pub(super) fn name_array_row<const NUM_VALUES: usize, Num: egui::emath::Numeric>
 /// Adds a grid row with a label and an RGBA color picker.
 pub(super) fn name_rgba_row(ui: &mut egui::Ui, name: &str, rgba: &mut [f32; 4]) {
     ui.label(name);
-    egui::color_picker::color_edit_button_rgba(ui, bytemuck::must_cast_mut(rgba), Alpha::OnlyBlend);
+    color_edit_button(ui, rgba, Alpha::OnlyBlend);
     ui.end_row();
 }
 
 /// Adds a grid row with a label and an RGB color picker.
 pub(super) fn name_rgb_row(ui: &mut egui::Ui, name: &str, rgb: &mut [f32; 3]) {
     ui.label(name);
-    egui::color_picker::color_edit_button_rgb(ui, rgb);
+    let [r, g, b] = *rgb;
+    let mut rgba = [r, g, b, 1.0];
+    color_edit_button(ui, &mut rgba, Alpha::Opaque);
+    rgb.copy_from_slice(&rgba[..3]);
     ui.end_row();
+}
+
+/// Shows a color picker button for a MuJoCo color: gamma-space RGB with straight alpha.
+fn color_edit_button(ui: &mut egui::Ui, rgba: &mut [f32; 4], alpha: Alpha) {
+    // egui's Rgba is linear with premultiplied alpha, while MuJoCo sends its colors to OpenGL as-is.
+    let [r, g, b, a] = *rgba;
+    let mut color = egui::Rgba::from_rgba_unmultiplied(
+        linear_from_gamma(r), linear_from_gamma(g), linear_from_gamma(b), a
+    );
+
+    // Write back only an edit, so that the conversion round trip does not change a loaded color.
+    if egui::color_picker::color_edit_button_rgba(ui, &mut color, alpha).changed() {
+        let [r, g, b, a] = color.to_rgba_unmultiplied();
+        *rgba = [gamma_from_linear(r), gamma_from_linear(g), gamma_from_linear(b), a];
+    }
 }
 
 /// Pager that shows only the widgets of the current page, followed by buttons that change the page.
