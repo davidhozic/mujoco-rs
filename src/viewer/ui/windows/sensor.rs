@@ -18,7 +18,9 @@ use super::{
     QUAT_COMPONENTS, XYZ_COMPONENTS, actuator_joint_type
 };
 
+/// Width of the bar of a sensor value with a natural range, in points.
 const SENSOR_BAR_WIDTH: f32 = 75.0;
+/// Corner radius of the bar of a sensor value with a natural range, in points.
 const SENSOR_BAR_CORNER_RADIUS: u8 = 3;
 
 /// Maximum number of widgets that an element shows on one page.
@@ -57,12 +59,12 @@ check_sensor_components!(CONTACT_SENSOR_COMPONENTS, MjtConDataField::mjNCONDATA)
 /// Maps MuJoCo rangefinder sensor components to a readable name, the physical unit and sub component
 /// axis names of the component.
 const RANGEFINDER_SENSOR_COMPONENTS: &[(u32, &str, &str, &[&str])] = &[
-    (MjtRayDataField::mjRAYDATA_DIST as u32,   "distance", " meters", &[""]),
-    (MjtRayDataField::mjRAYDATA_DIR as u32,    "dir",      "",        &XYZ_COMPONENTS),
-    (MjtRayDataField::mjRAYDATA_ORIGIN as u32, "origin",   " meters", &XYZ_COMPONENTS),
-    (MjtRayDataField::mjRAYDATA_POINT as u32,  "point",    " meters", &XYZ_COMPONENTS),
-    (MjtRayDataField::mjRAYDATA_NORMAL as u32, "normal",   "",        &XYZ_COMPONENTS),
-    (MjtRayDataField::mjRAYDATA_DEPTH as u32,  "depth",    " meters", &[""]),
+    (MjtRayDataField::mjRAYDATA_DIST as u32,   "distance", " m", &[""]),
+    (MjtRayDataField::mjRAYDATA_DIR as u32,    "dir",      "",   &XYZ_COMPONENTS),
+    (MjtRayDataField::mjRAYDATA_ORIGIN as u32, "origin",   " m", &XYZ_COMPONENTS),
+    (MjtRayDataField::mjRAYDATA_POINT as u32,  "point",    " m", &XYZ_COMPONENTS),
+    (MjtRayDataField::mjRAYDATA_NORMAL as u32, "normal",   "",   &XYZ_COMPONENTS),
+    (MjtRayDataField::mjRAYDATA_DEPTH as u32,  "depth",    " m", &[""]),
 ];
 check_sensor_components!(RANGEFINDER_SENSOR_COMPONENTS, MjtRayDataField::mjNRAYDATA);
 
@@ -93,10 +95,10 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
             && model.wrap_type()[model.tendon_adr()[objid] as usize] != MjtWrap::mjWRAP_JOINT;
 
         let labelled = |name: &str, labels: &'static [&'static str], range: Option<RangeInclusive<MjtNum>>, unit| -> Box<[ComponentDisplayInfo]> {
-            Box::new([ComponentDisplayInfo { name: Some(name.to_owned()), range, unit, sub_component_names: labels }])
+            Box::new([ComponentDisplayInfo { name: name.to_owned(), range, unit, sub_component_names: labels }])
         };
         let scalar = |name: &str, (unit, range)| -> Box<[ComponentDisplayInfo]> {
-            Box::new([ComponentDisplayInfo { name: Some(name.to_owned()), range, unit, sub_component_names: &[""] }])
+            Box::new([ComponentDisplayInfo { name: name.to_owned(), range, unit, sub_component_names: &[""] }])
         };
         let xyz = |name, unit| labelled(name, &XYZ_COMPONENTS, None, unit);
         let unit_xyz = |name| labelled(name, &XYZ_COMPONENTS, Some(-1.0..=1.0), "");
@@ -189,36 +191,8 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
             MjtSensor::mjSENS_E_KINETIC => scalar("kinetic energy", (" J", None)),
             MjtSensor::mjSENS_CLOCK => scalar("time", (" s", None)),
 
-            MjtSensor::mjSENS_RANGEFINDER => {
-                let data_bitmask = model.sensor_intprm()[sensor_id][0];
-                let components = RANGEFINDER_SENSOR_COMPONENTS.iter()
-                    .filter(|(bit, ..)| data_bitmask & (1 << *bit) != 0);
-
-                // TODO: move ranges into the components array.
-                components.map(|(_, data_name, unit, subcomponents)| {
-                    ComponentDisplayInfo {
-                        name: Some(data_name.to_string()),
-                        unit,
-                        range: None,
-                        sub_component_names: subcomponents,
-                    }
-                }).collect()
-            }
-            MjtSensor::mjSENS_CONTACT => {
-                let data_bitmask = model.sensor_intprm()[sensor_id][0];
-                let components = CONTACT_SENSOR_COMPONENTS.iter()
-                    .filter(|(bit, ..)| data_bitmask & (1 << *bit) != 0);
-
-                // TODO: move ranges into the components array.
-                components.map(|(_, data_name, unit, subcomponents)| {
-                    ComponentDisplayInfo {
-                        name: Some(data_name.to_string()),
-                        unit,
-                        range: None,
-                        sub_component_names: subcomponents,
-                    }
-                }).collect()
-            }
+            MjtSensor::mjSENS_RANGEFINDER => bitmask_components(RANGEFINDER_SENSOR_COMPONENTS, model.sensor_intprm()[sensor_id][0]),
+            MjtSensor::mjSENS_CONTACT => bitmask_components(CONTACT_SENSOR_COMPONENTS, model.sensor_intprm()[sensor_id][0]),
 
             MjtSensor::mjSENS_TACTILE => return ElementDisplayInfo::NameOnly { name },
 
@@ -226,7 +200,7 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
             | MjtSensor::mjSENS_PLUGIN => {
                 (0..sensor_dim).map(|i| {
                     ComponentDisplayInfo {
-                        name: Some(if sensor_dim > 1 { format!("value {i}") } else { "value".to_owned() }),
+                        name: if sensor_dim > 1 { format!("value {i}") } else { "value".to_owned() },
                         range: None,
                         unit: "",
                         sub_component_names: &[""],
@@ -248,10 +222,25 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
             MjtSensor::mjSENS_CONTACT => model.sensor_intprm()[sensor_id][2] as usize,
             _ => 1
         };
-        let n_components = components.iter().map(|component| component.sub_component_names.len()).sum::<usize>();
-        debug_assert_eq!(n_components * n_replicate, sensor_dim, "unexpected dimension of sensor type {sensor_type:?}");
-        ElementDisplayInfo::Full { name, adr_start, components, n_replicate }
+        let info = ElementDisplayInfo::Full { name, adr_start, components, n_replicate };
+        debug_assert_eq!(info.replica_len() * n_replicate, sensor_dim, "unexpected dimension of sensor type {sensor_type:?}");
+        info
     })
+}
+
+/// Returns the display information of each component in `table` whose bit is set in `data_bitmask`.
+fn bitmask_components(table: &[(u32, &str, &'static str, &'static [&'static str])], data_bitmask: i32) -> Box<[ComponentDisplayInfo]> {
+    // TODO: move ranges into the components array.
+    table.iter()
+        .filter(|(bit, ..)| data_bitmask & (1 << *bit) != 0)
+        .map(|(_, data_name, unit, subcomponents)| {
+            ComponentDisplayInfo {
+                name: data_name.to_string(),
+                unit,
+                range: None,
+                sub_component_names: subcomponents,
+            }
+        }).collect()
 }
 
 /// Shows the sensor window when `open` is set.
@@ -294,7 +283,7 @@ pub fn show(
                     });
                 }
                 ElementDisplayInfo::Full { name, adr_start, components, n_replicate } => {
-                    let n_components = components.iter().map(|component| component.sub_component_names.len()).sum::<usize>();
+                    let n_components = info.replica_len();
                     let sensor_data = &sensordata[*adr_start..*adr_start + n_components * *n_replicate];
                     ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
                         // A user sensor can have dim 0; chunks_exact(0) panics,
@@ -310,8 +299,24 @@ pub fn show(
                         );
 
                         if *n_replicate > 1 {
-                            for (replica_i, replica_data) in sensor_data.chunks_exact(n_components).enumerate() {
-                                widget_page.paged(ui, |ui| {
+                            // Optimization 1: add virtual widgets up to the start of the current page, which was
+                            // configured in prior UI passes.
+                            // This allows us to skip iteration of data replicas assigned to lesser pages, where this
+                            // iteration would only cause the counter to increase, without actually adding real widgets.
+                            // What would happen is the same as with the `paged_empty` call below, but slower.
+                            let available_start = widget_page.page_local_offset();
+                            widget_page.paged_empty(available_start);
+
+                            // Optimization 2: Inclusevly iterate only up to data replica assigned to the current page.
+                            let available = widget_page.available_in_current_page();
+
+                            for (replica_i, replica_data) in sensor_data
+                                .chunks_exact(n_components)
+                                .enumerate()
+                                .skip(available_start)
+                                .take(available)
+                            {
+                                widget_page.paged(ui, |ui|
                                     ui.collapsing(RichText::new(format!("#{replica_i}")).font(SECONDARY_FONT), |ui| {
                                         egui::Grid::new("sensor_data_ui_grid")
                                             .spacing(egui::vec2(INSPECTOR_GRID_SPACING_X, INSPECTOR_GRID_SPACING_Y))
@@ -325,9 +330,14 @@ pub fn show(
                                                 show_sensor_row(ui, component, values, row_i == components.len() - 1);
                                             }
                                         });
-                                    });
-                                });
+                                    })
+                                );
                             }
+
+                            // Add fake widgets (increase internal count) such that we simulate above loop iterating
+                            // and repopulating all the pages. This final step is needed to trick the UI into thinking
+                            // we did actually add more widgets. If we don't do this, there will be no buttons displayed.
+                            widget_page.paged_empty(n_replicate.saturating_sub(available_start + available));
                         }
                         else {
                             egui::Grid::new("sensor_data_ui_grid")
@@ -356,14 +366,10 @@ pub fn show(
 
 /// Shows one row (i.e., component) of a given sensor.
 fn show_sensor_row(ui: &mut egui::Ui, component: &ComponentDisplayInfo, values: &[MjtNum], is_last: bool) {
-    if let Some(name) = &component.name {
-        ui.label(RichText::new(name).font(SECONDARY_FONT));
-    }
-
+    // Empty labels also take a cell, so that the values of all rows share the same columns.
+    ui.label(RichText::new(&component.name).font(SECONDARY_FONT));
     for (sub_name, value) in component.sub_component_names.iter().zip(values) {
-        if !sub_name.is_empty() {
-            ui.label(RichText::new(*sub_name).font(SECONDARY_FONT));
-        }
+        ui.label(RichText::new(*sub_name).font(SECONDARY_FONT));
 
         match &component.range {
             Some(range) => {

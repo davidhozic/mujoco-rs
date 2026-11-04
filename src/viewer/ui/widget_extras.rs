@@ -94,6 +94,38 @@ impl<'p> WidgetPage<'p> {
             widget(ui)
         })
     }
+
+    /// Returns the number of elements that can still fit into the current page.
+    ///
+    /// # Example
+    /// In the following example, the page index is 1 (second page), `x` means free space and `o` means taken.
+    /// ```text
+    /// |  o
+    /// |  o
+    /// |  o
+    /// |  ----------- current page (page index == 1; second page)
+    /// |  o
+    /// |  x            <------------- free in this page, thus 2 is returned.
+    /// |  x            <-------------
+    /// |  -----------
+    /// |  x
+    /// |  x
+    /// |  x
+    /// ```
+    pub(super) fn available_in_current_page(&self) -> usize {
+        // Zero once the added widgets pass the end of the current page.
+        ((*self.page + 1) * *self.widgets_per_page).saturating_sub(self.widgets_added)
+    }
+
+    /// Returns the start index of the current page.
+    pub(super) fn page_local_offset(&self) -> usize {
+        *self.page * *self.widgets_per_page
+    }
+
+    /// Increases the internal count of the total number of widgets, effectively adding fake widgets.
+    pub(super) fn paged_empty(&mut self, num_widgets: usize) {
+        self.widgets_added += num_widgets;
+    }
 }
 
 impl egui::Widget for WidgetPage<'_> {
@@ -139,11 +171,7 @@ impl SearchBar {
     }
 
     /// Shows the search field.
-    pub(super) fn show<'a>(
-        &mut self,
-        ui: &mut egui::Ui,
-    )
-    {
+    pub(super) fn show(&mut self, ui: &mut egui::Ui) {
         ui.add(egui::TextEdit::singleline(&mut self.text)
             .hint_text(&self.hint_text)
         );

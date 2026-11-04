@@ -1,6 +1,7 @@
 //! A submodule of the viewer's UI representing the joint window definitions.
 use std::sync::{Arc, Mutex};
 use std::f64::consts::PI;
+use std::mem;
 
 use egui_winit::egui;
 use egui::RichText;
@@ -35,10 +36,10 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
             MjtJoint::mjJNT_FREE => {
                 Box::new([
                     ComponentDisplayInfo {
-                        name: Some("position".to_owned()), range: None, unit: " m", sub_component_names: &XYZ_COMPONENTS
+                        name: "position".to_owned(), range: None, unit: " m", sub_component_names: &XYZ_COMPONENTS
                     },
                     ComponentDisplayInfo {
-                        name: Some("orientation".to_owned()), range: Some(-1.0..=1.0), unit: "", sub_component_names: &QUAT_COMPONENTS
+                        name: "orientation".to_owned(), range: Some(-1.0..=1.0), unit: "", sub_component_names: &QUAT_COMPONENTS
                     },
                 ])
             }
@@ -46,7 +47,7 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
             // A quaternion component always lies inside the unit sphere.
             MjtJoint::mjJNT_BALL => {
                 Box::new([ComponentDisplayInfo {
-                    name: Some("orientation".to_owned()), range: Some(-1.0..=1.0), unit: "", sub_component_names: &QUAT_COMPONENTS
+                    name: "orientation".to_owned(), range: Some(-1.0..=1.0), unit: "", sub_component_names: &QUAT_COMPONENTS
                 }])
             }
 
@@ -61,7 +62,7 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
                 } else { -PI..=PI };
                 let unit = if is_slide { " m" } else { " rad" };
                 Box::new([ComponentDisplayInfo {
-                    name: Some("position".to_owned()), range: Some(range), unit, sub_component_names: &[""]
+                    name: "position".to_owned(), range: Some(range), unit, sub_component_names: &[""]
                 }])
             }
         };
@@ -109,42 +110,44 @@ pub fn show(
                     });
                 }
                 ElementDisplayInfo::Full { name, adr_start, components, .. } => {
-                    let n_components = components.iter().map(|component| component.sub_component_names.len()).sum::<usize>();
-                    let joint_qpos = &mut qpos[*adr_start..*adr_start + n_components];
+                    let mut rest = &mut qpos[*adr_start..];
                     ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
                         egui::Grid::new("joint_qpos_ui_grid")
                             .spacing(egui::vec2(INSPECTOR_GRID_SPACING_X, INSPECTOR_GRID_SPACING_Y))
                             .min_col_width(0.0)
                             .show(ui, |ui|
                         {
-                            let sub_components = components.iter().flat_map(|component| {
-                                component.sub_component_names.iter().map(move |sub_name| (component, sub_name))
-                            });
-                            for ((component, sub_name), value) in sub_components.zip(joint_qpos.iter_mut()) {
-                                if !sub_name.is_empty() {
+                            for component in components {
+                                let values;
+                                (values, rest) = mem::take(&mut rest).split_at_mut(component.sub_component_names.len());
+
+                                // Empty labels also take a cell, so that the values of all rows
+                                // share the same columns.
+                                ui.label(RichText::new(&component.name).font(SECONDARY_FONT));
+                                for (sub_name, value) in component.sub_component_names.iter().zip(values) {
                                     ui.label(RichText::new(*sub_name).font(SECONDARY_FONT));
+
+                                    // A slider must not clamp: the simulation reaches values outside
+                                    // the range, for example a hinge that turns past pi.
+                                    match &component.range {
+                                        Some(range) => ui.add(
+                                            egui::Slider::new(value, range.clone())
+                                            .clamping(egui::SliderClamping::Never)
+                                            .update_while_editing(false)
+                                            .suffix(component.unit)
+                                        ),
+
+                                        None => ui.add(
+                                            egui::DragValue::new(value)
+                                            .speed(JOINT_INPUT_DRAG_SPEED)
+                                            .update_while_editing(false)
+                                            .suffix(component.unit)
+                                        )
+                                    };
+                                    ui.add(egui::Separator::default().vertical());
                                 }
-
-                                // A slider must not clamp: the simulation reaches values outside
-                                // the range, for example a hinge that turns past pi.
-                                match &component.range {
-                                    Some(range) => ui.add(
-                                        egui::Slider::new(value, range.clone())
-                                        .clamping(egui::SliderClamping::Never)
-                                        .update_while_editing(false)
-                                        .suffix(component.unit)
-                                    ),
-
-                                    None => ui.add(
-                                        egui::DragValue::new(value)
-                                        .speed(JOINT_INPUT_DRAG_SPEED)
-                                        .update_while_editing(false)
-                                        .suffix(component.unit)
-                                    )
-                                };
-                                ui.add(egui::Separator::default().vertical());
+                                ui.end_row();
                             }
-                            ui.end_row();
                         });
                     });
                 }

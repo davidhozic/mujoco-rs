@@ -10,7 +10,9 @@ use std::ops::RangeInclusive;
 use crate::wrappers::mj_model::{MjModel, MjtJoint, MjtTrn};
 use crate::wrappers::mj_primitive::MjtNum;
 
+/// Horizontal spacing between the cells of an element's grid, in points.
 const INSPECTOR_GRID_SPACING_X: f32 = 6.0;
+/// Vertical spacing between the rows of an element's grid, in points.
 const INSPECTOR_GRID_SPACING_Y: f32 = 10.0;
 
 /// Tolerance below which a gear norm is still considered as unit (=1).
@@ -25,8 +27,8 @@ const QUAT_COMPONENTS: [&str; 4] = ["qw", "qx", "qy", "qz"];
 /// Cached display information about one component of an element (e.g., sensor, joint, etc.).
 /// One component can have multiple sub-components (e.g., a vector has x, y and z).
 pub(super) struct ComponentDisplayInfo {
-    /// Name of the component or [`None`] when the component shows no label.
-    name: Option<String>,
+    /// Name of the component or an empty string when the component shows no label.
+    name: String,
     /// Range of the slider (actuator, joint) or the progress bar (sensor) of the component, or
     /// [`None`] when the component has no natural range and shows a plain value instead.
     range: Option<RangeInclusive<MjtNum>>,
@@ -62,6 +64,16 @@ impl ElementDisplayInfo {
     pub(super) fn name(&self) -> &str {
         match self {
             Self::NameOnly { name } | Self::Full { name, .. } => name,
+        }
+    }
+
+    /// Returns the number of values in one replica of the element's data (0 when name-only).
+    pub(super) fn replica_len(&self) -> usize {
+        match self {
+            Self::NameOnly { .. } => 0,
+            Self::Full { components, .. } => {
+                components.iter().map(|component| component.sub_component_names.len()).sum()
+            }
         }
     }
 }

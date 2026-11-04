@@ -43,7 +43,8 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
                 let input_name = model.actuator_input_name(idx_actuator, idx_in);
                 let name = input_name
                     .map(str::to_owned)
-                    .or_else(|| (num_inputs > 1).then(|| idx_in.to_string()));
+                    .or_else(|| (num_inputs > 1).then(|| idx_in.to_string()))
+                    .unwrap_or_default();
 
                 let [low, high] = input_limits[adr_start + idx_in];
                 let range = if low < high { low..=high } else { -1.0..=1.0 };
@@ -119,8 +120,8 @@ pub fn show(
                             .show(ui, |ui|
                         {
                             for (component, ctrl) in components.iter().zip(actuator_ctrl) {
-                                if let Some(name) = &component.name {
-                                    ui.label(RichText::new(name).font(SECONDARY_FONT));
+                                if !component.name.is_empty() {
+                                    ui.label(RichText::new(&component.name).font(SECONDARY_FONT));
                                 }
                                 ui.add(
                                     egui::Slider::new(ctrl, component.range.clone().unwrap())

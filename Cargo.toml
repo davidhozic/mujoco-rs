@@ -9,10 +9,6 @@ rust-version = "1.95"
 [workspace.lints.clippy]
 unnecessary_lazy_evaluations = "allow"
 
-# Reduce size of builds
-[profile.dev]
-split-debuginfo = "unpacked"
-
 [package]
 name = "mujoco-rs"
 version = "7.0.0+mj-3.17.0"
