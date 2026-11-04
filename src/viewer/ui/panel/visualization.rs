@@ -187,7 +187,7 @@ pub fn show(
                 name_scalar_row(ui, "Frame width", &mut vis.scale.framewidth, 1e-3, 0.0..=f32::INFINITY);
                 name_scalar_row(ui, "Constraint", &mut vis.scale.constraint, 1e-3, 0.0..=f32::INFINITY);
                 name_scalar_row(ui, "Slider crank", &mut vis.scale.slidercrank, 1e-3, 0.0..=f32::INFINITY);
-                name_scalar_row(ui, "Frustum", &mut vis.scale.frustum, 1e-3, 0.0..=1.0);
+                name_scalar_row(ui, "Frustum", &mut vis.scale.frustum, 1e-3, 0.0..=f32::INFINITY);
             });
         });
 

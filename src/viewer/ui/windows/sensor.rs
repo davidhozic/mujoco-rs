@@ -213,9 +213,10 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
                 if objtype == MjtObjBase::mjOBJ_SITE {
                     1
                 } else {
-                    // MuJoCo accepts any camera resolution and multiplies it the same way.
+                    // MuJoCo multiplies the raw resolution (mjs_sensorDim) and checks its sign
+                    // only when sensorsize is set.
                     let [width, height] = model.cam_resolution()[objid];
-                    width.max(0) as usize * height.max(0) as usize
+                    (width * height).max(0) as usize
                 }
             }
             MjtSensor::mjSENS_CONTACT => model.sensor_intprm()[sensor_id][2] as usize,
@@ -224,7 +225,7 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
         let info = ElementDisplayInfo::Full { name, adr_start, components, n_replicate };
         // Assert only in development, as this is something that is not left-up to ambiguity.
         // If this doesn't pass, we have a bug.
-        // To anyone reading this, please report it if such a bug exits :).
+        // To anyone reading this, please report it if such a bug exists :).
         debug_assert_eq!(info.replica_len() * n_replicate, sensor_dim, "unexpected dimension of sensor type {sensor_type:?}");
         info
     })

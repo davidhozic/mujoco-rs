@@ -162,7 +162,7 @@ pub fn show(ui: &mut egui::Ui, shared_viewer_state: &Arc<Mutex<ViewerSharedState
         ui.collapsing(RichText::new("Algorithm parameters").font(MAIN_FONT), |ui| {
             egui::Grid::new("algo_param_grid").num_columns(2).show(ui, |ui| {
                 name_scalar_row(ui, "Timestep", &mut options.timestep, 1e-6, 0.0..=f64::INFINITY);
-                name_scalar_row(ui, "Iterations", &mut options.iterations, 1.0, 1..=i32::MAX);
+                name_scalar_row(ui, "Iterations", &mut options.iterations, 1.0, 0..=i32::MAX);
                 name_scalar_row(ui, "Tolerance", &mut options.tolerance, 1e-8, 0.0..=f64::INFINITY);
                 name_scalar_row(ui, "LS Iter", &mut options.ls_iterations, 1.0, 1..=i32::MAX);
                 name_scalar_row(ui, "LS Tol", &mut options.ls_tolerance, 1e-8, 0.0..=f64::INFINITY);
