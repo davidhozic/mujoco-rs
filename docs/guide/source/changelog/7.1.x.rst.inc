@@ -45,6 +45,12 @@
 
 - The viewer no longer panics on a drag after a ctrl-double-click over the sky. Additionally, the
   selection is now not cleared when double-clicking over the sky whilst ctrl or alt key is pressed.
+- The viewer UI no longer changes the solver "Iterations" option of a model that sets it to 0, and
+  no longer reduces the "Frustum" scale to 1 once the UI panel is open.
+- The built-in windows and the camera tracking dialog no longer share their state with a user
+  `egui <https://docs.rs/egui/0.36.1/egui/>`_ window or dialog that has the same title or ID.
+- Two elements whose names are equal in a joint or actuator window (for example a joint named
+  ``Joint 3`` and the unnamed joint 3) no longer open and close together.
 
 .. rubric:: Other changes
 
