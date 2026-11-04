@@ -257,13 +257,12 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
 /// Shows the sensor window when `open` is set.
 pub fn show(
     ui: &mut egui::Ui, open: &mut bool, sensor_info: &[ElementDisplayInfo], search_bar: &mut SearchBar,
-    page: &mut usize, widgets_per_page: &mut usize, shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
+    pages: &mut [(usize, usize)], shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
 )
 {
     // Clear the text inside the window's search bar when the window is closed.
     if !*open {
-        *page = 0;
-        *widgets_per_page = MAX_WIDGETS_PER_ELEMENT;
+        pages.fill((0, MAX_WIDGETS_PER_ELEMENT));
         search_bar.clear();
     }
 
@@ -283,7 +282,7 @@ pub fn show(
 
         /* Sensor widgets */
         let sensordata = lock.data_passive.sensordata();
-        for info in sensor_info {
+        for (info, (page, widgets_per_page)) in sensor_info.iter().zip(pages.iter_mut()) {
             if let Some(query) = search_bar.text() && !info.name().starts_with(query) {
                 continue;
             }

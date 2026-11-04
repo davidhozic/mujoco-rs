@@ -109,9 +109,11 @@ impl egui::Widget for WidgetPage<'_> {
                 *self.page = self.page.saturating_sub(1);
             }
             if ui.button("➡").clicked() {
-                *self.page = (*self.page + 1).min((self.widgets_added / *self.widgets_per_page).saturating_sub(1));
+                *self.page = (*self.page + 1).min(self.widgets_added.div_ceil(*self.widgets_per_page) - 1);
             }
             if ui.button("Expand").clicked() {
+                // Halving the page keeps the page valid and its first widget visible.
+                *self.page /= 2;
                 *self.widgets_per_page *= 2;
             }
         }).response

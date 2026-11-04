@@ -80,8 +80,8 @@ pub(crate) struct ViewerUI {
     equality_search_bar: SearchBar,
 
     /* Window page states */
-    sensor_page: usize,
-    sensor_widgets_per_page: usize,
+    /// Page and widgets per page of each sensor, in ID order.
+    sensor_pages: Vec<(usize, usize)>,
 
     /* Model-related */
     camera_names: Vec<String>,
@@ -137,8 +137,7 @@ impl ViewerUI {
             joint_search_bar: SearchBar::new("Enter joint's name"),
             sensor_search_bar: SearchBar::new("Enter sensor's name"),
             equality_search_bar: SearchBar::new("Enter equality's name"),
-            sensor_page: 0,
-            sensor_widgets_per_page: MAX_WIDGETS_PER_ELEMENT,
+            sensor_pages: Vec::new(),
         };
         viewer_ui.reset_to_model(model);
         Ok(viewer_ui)
@@ -159,8 +158,7 @@ impl ViewerUI {
         self.sensor_info = windows::sensor::display_infos(model).collect();
         self.equality_names = windows::equality::names(model).collect();
 
-        self.sensor_page = 0;
-        self.sensor_widgets_per_page = MAX_WIDGETS_PER_ELEMENT;
+        self.sensor_pages = vec![(0, MAX_WIDGETS_PER_ELEMENT); self.sensor_info.len()];
 
         /* Camera tracking state */
         // The pending selection is a body ID of the previous model, which addresses a different
@@ -285,7 +283,7 @@ impl ViewerUI {
             // Sensors window
             windows::sensor::show(
                 ui, &mut self.sensor_window, &self.sensor_info, &mut self.sensor_search_bar,
-                &mut self.sensor_page, &mut self.sensor_widgets_per_page, shared_viewer_state
+                &mut self.sensor_pages, shared_viewer_state
             );
 
             // Equalities window
