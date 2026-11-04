@@ -41,7 +41,7 @@ const EXAMPLE_MODEL: &str = stringify! {
   <worldbody>
     <camera
         name="lidar-array" pos="4.604 0.369 1.329" xyaxes="-0.232 0.973 -0.000 -0.761 -0.181 0.622"
-        resolution="10 13"
+        resolution="10 10" fovy="20"
     />
 
     <light pos="0 -.6 3" dir="0 .2 -1" diffuse=".8 .8 .8"/>
