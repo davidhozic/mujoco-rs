@@ -22,15 +22,15 @@ const JOINT_INPUT_DRAG_SPEED: f64 = 0.01;
 
 /// Returns the display information of each joint of `model`, in ID order.
 pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo> {
-    (0..model.njnt() as usize).map(|idx_joint| {
-        let name = model.id_to_name(MjtObjBase::mjOBJ_JOINT, idx_joint)
+    (0..model.njnt() as usize).map(|joint_id| {
+        let name = model.id_to_name(MjtObjBase::mjOBJ_JOINT, joint_id)
             .map(|name| name.to_string())
-            .unwrap_or_else(|| format!("Joint {idx_joint}"));
+            .unwrap_or_else(|| format!("Joint {joint_id}"));
 
-        let adr_start = model.jnt_qposadr()[idx_joint] as usize;
-        let limits = model.jnt_range()[idx_joint];
+        let adr_start = model.jnt_qposadr()[joint_id] as usize;
+        let limits = model.jnt_range()[joint_id];
 
-        let components: Box<[_]> = match model.jnt_type()[idx_joint] {
+        let components: Box<[_]> = match model.jnt_type()[joint_id] {
             // A free joint holds no limit and no natural range for its position, so each
             // translation component takes a numeric input.
             MjtJoint::mjJNT_FREE => {
@@ -55,7 +55,7 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
             // to. Without a limit the slider spans the same range as MuJoCo's own viewer.
             joint_type => {
                 let is_slide = joint_type == MjtJoint::mjJNT_SLIDE;
-                let range = if model.jnt_limited()[idx_joint] {
+                let range = if model.jnt_limited()[joint_id] {
                     limits[0]..=limits[1]
                 } else if is_slide {
                     -1.0..=1.0

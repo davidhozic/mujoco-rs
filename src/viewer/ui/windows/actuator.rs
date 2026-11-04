@@ -17,36 +17,36 @@ use super::{
 
 /// Returns the display information of each actuator of `model`, in ID order.
 pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo> {
-    (0..model.nactuator() as usize).map(|idx_actuator| {
+    (0..model.nactuator() as usize).map(|actuator_id| {
         let input_limits = model.actuator_ctrlrange();
-        let adr_start = model.actuator_ctrladr()[idx_actuator] as usize;
-        let num_inputs = model.actuator_ctrlnum()[idx_actuator] as usize;
+        let adr_start = model.actuator_ctrladr()[actuator_id] as usize;
+        let num_inputs = model.actuator_ctrlnum()[actuator_id] as usize;
 
-        let name = model.id_to_name(MjtObjBase::mjOBJ_ACTUATOR, idx_actuator)
+        let name = model.id_to_name(MjtObjBase::mjOBJ_ACTUATOR, actuator_id)
             .map(|name| name.to_string())
-            .unwrap_or_else(|| format!("Actuator {idx_actuator}"));
+            .unwrap_or_else(|| format!("Actuator {actuator_id}"));
 
-        let joint_type = actuator_joint_type(model, idx_actuator);
+        let joint_type = actuator_joint_type(model, actuator_id);
         let is_slide = joint_type == Some(MjtJoint::mjJNT_SLIDE);
-        let dyntype = model.actuator_dyntype()[idx_actuator];
+        let dyntype = model.actuator_dyntype()[actuator_id];
         let is_integrator = dyntype == MjtDyn::mjDYN_INTEGRATOR;
-        let is_unit_motor = model.actuator_gaintype()[idx_actuator] == MjtGain::mjGAIN_FIXED
-            && model.actuator_gainprm()[idx_actuator][0].abs() == 1.0
-            && model.actuator_biastype()[idx_actuator] == MjtBias::mjBIAS_NONE
+        let is_unit_motor = model.actuator_gaintype()[actuator_id] == MjtGain::mjGAIN_FIXED
+            && model.actuator_gainprm()[actuator_id][0].abs() == 1.0
+            && model.actuator_biastype()[actuator_id] == MjtBias::mjBIAS_NONE
             && matches!(dyntype, MjtDyn::mjDYN_NONE | MjtDyn::mjDYN_FILTER | MjtDyn::mjDYN_FILTEREXACT)
-            && model.actuator_plugin()[idx_actuator] < 0;
+            && model.actuator_plugin()[actuator_id] < 0;
 
         let components = (0..num_inputs)
-            .map(|idx_in| {
+            .map(|input_index| {
                 // Most actuator types define no input names. An actuator with more than one
                 // input then shows the input index, an actuator with one input shows no label.
-                let input_name = model.actuator_input_name(idx_actuator, idx_in);
+                let input_name = model.actuator_input_name(actuator_id, input_index);
                 let name = input_name
                     .map(str::to_owned)
-                    .or_else(|| (num_inputs > 1).then(|| idx_in.to_string()))
+                    .or_else(|| (num_inputs > 1).then(|| input_index.to_string()))
                     .unwrap_or_default();
 
-                let [low, high] = input_limits[adr_start + idx_in];
+                let [low, high] = input_limits[adr_start + input_index];
                 let range = if low < high { low..=high } else { -1.0..=1.0 };
                 let unit = match input_name {
                     Some("voltage") => " V",
@@ -138,7 +138,6 @@ pub fn show(
             }
         }
 
-        // Clear all actuator controls by setting them to 0
         if ui.button(RichText::new("Clear").font(MAIN_FONT)).clicked() {
             ctrl_mut.fill(0.0);
         }

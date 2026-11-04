@@ -6,9 +6,9 @@ use egui_winit::egui;
 use egui::RichText;
 
 use crate::wrappers::mj_model::{MjModel, MjtObjBase, MjtJoint, MjtWrap};
-use crate::viewer::ui::{MAIN_FONT, SECONDARY_FONT};
-use crate::viewer::ui::widget_extras::{SearchBar, WidgetPage};
 use crate::wrappers::{MjtConDataField, MjtRayDataField, MjtSensor};
+use crate::viewer::ui::widget_extras::{SearchBar, WidgetPage};
+use crate::viewer::ui::{MAIN_FONT, SECONDARY_FONT};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::viewer::ViewerSharedState;
 use crate::util::LockUnpoison;
@@ -31,12 +31,12 @@ macro_rules! check_sensor_components {
     ($components:expr, $len:expr) => {
         const _: () = const {
             let mut i = 0;
-            assert!($components.len() ==  $len as usize);
+            assert!($components.len() == $len as usize);
             while i < $components.len() {
                 let e_type = $components[i].0;
                 assert!(e_type as usize == i);
                 i += 1;
-            }       
+            }
         };
     };
 }
@@ -115,9 +115,8 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
             MjtSensor::mjSENS_CAMPROJECTION => labelled("projection", &SENSOR_CAMPROJECTION_COMPONENTS, None, " px"),
 
             MjtSensor::mjSENS_JOINTPOS => {
-                let jnt_id = model.sensor_objid()[sensor_id] as usize;
-                let range = model.jnt_limited()[jnt_id]
-                    .then(|| { let [l, r] = model.jnt_range()[jnt_id]; l..=r });
+                let range = model.jnt_limited()[objid]
+                    .then(|| { let [low, high] = model.jnt_range()[objid]; low..=high });
                 scalar("position", (if is_slide { " m" } else { " rad" }, range))
             }
             // The value is the distance to the limit, not a position inside the joint range.
@@ -211,11 +210,10 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
 
         let n_replicate = match sensor_type {
             MjtSensor::mjSENS_RANGEFINDER => {
-                if model.sensor_objtype()[sensor_id] == MjtObjBase::mjOBJ_SITE {
+                if objtype == MjtObjBase::mjOBJ_SITE {
                     1
-                } else {  // camera
-                    let cam_id = model.sensor_objid()[sensor_id] as usize;
-                    let [width, height] = model.cam_resolution()[cam_id];
+                } else {
+                    let [width, height] = model.cam_resolution()[objid];
                     width as usize * height as usize
                 }
             }
@@ -249,7 +247,7 @@ pub fn show(
     pages: &mut [(usize, usize)], shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
 )
 {
-    // Clear the text inside the window's search bar when the window is closed.
+    // Reset the pages and clear the search bar when the window is closed.
     if !*open {
         pages.fill((0, MAX_WIDGETS_PER_ELEMENT));
         search_bar.clear();
@@ -338,8 +336,7 @@ pub fn show(
                             // and repopulating all the pages. This final step is needed to trick the UI into thinking
                             // we did actually add more widgets. If we don't do this, there will be no buttons displayed.
                             widget_page.paged_empty(n_replicate.saturating_sub(available_start + available));
-                        }
-                        else {
+                        } else {
                             egui::Grid::new("sensor_data_ui_grid")
                                 .spacing(egui::vec2(INSPECTOR_GRID_SPACING_X, INSPECTOR_GRID_SPACING_Y))
                                 .min_col_width(0.0)
