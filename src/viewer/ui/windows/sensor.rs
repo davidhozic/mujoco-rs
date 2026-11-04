@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use egui_winit::egui;
 use egui::RichText;
 
-use crate::wrappers::mj_model::{MjModel, MjtObjBase, MjtJoint, MjtWrap};
+use crate::wrappers::mj_model::{MjModel, MjtObjBase, MjtJoint, MjtBias, MjtWrap};
 use crate::wrappers::{MjtConDataField, MjtRayDataField, MjtSensor};
 use crate::viewer::ui::widget_extras::{SearchBar, WidgetPage};
 use crate::viewer::ui::{MAIN_FONT, SECONDARY_FONT};
@@ -41,8 +41,8 @@ macro_rules! check_sensor_components {
     };
 }
 
-/// Maps MuJoCo contact sensor components to a readable name, the physical unit and sub component
-/// axis names of the component.
+/// Maps MuJoCo contact sensor components to a readable name, the physical unit, sub component
+/// axis names and the value range (if any) of the component.
 const CONTACT_SENSOR_COMPONENTS: &[(u32, &str, &str, &[&str], Option<RangeInclusive<MjtNum>>)] = &[
     (MjtConDataField::mjCONDATA_FOUND as u32,   "found",   " contacts", &[""],          None),
     (MjtConDataField::mjCONDATA_FORCE as u32,   "force",   " N",        &XYZ_COMPONENTS, None),
@@ -56,8 +56,8 @@ const CONTACT_SENSOR_COMPONENTS: &[(u32, &str, &str, &[&str], Option<RangeInclus
 ];
 check_sensor_components!(CONTACT_SENSOR_COMPONENTS, MjtConDataField::mjNCONDATA);
 
-/// Maps MuJoCo rangefinder sensor components to a readable name, the physical unit and sub component
-/// axis names of the component.
+/// Maps MuJoCo rangefinder sensor components to a readable name, the physical unit, sub component
+/// axis names and the value range (if any) of the component.
 const RANGEFINDER_SENSOR_COMPONENTS: &[(u32, &str, &str, &[&str], Option<RangeInclusive<MjtNum>>)] = &[
     (MjtRayDataField::mjRAYDATA_DIST as u32,   "distance", " m", &[""],          None),
     (MjtRayDataField::mjRAYDATA_DIR as u32,    "dir",      "",   &XYZ_COMPONENTS, Some(-1.0..=1.0)),
@@ -121,27 +121,25 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
             }
             // The value is the distance to the limit, not a position inside the joint range.
             MjtSensor::mjSENS_JOINTLIMITPOS => scalar("limit distance", (if is_slide { " m" } else { " rad" }, None)),
-            MjtSensor::mjSENS_JOINTVEL | MjtSensor::mjSENS_JOINTLIMITVEL => {
-                let name = if sensor_type == MjtSensor::mjSENS_JOINTVEL { "velocity" } else { "limit velocity" };
-                scalar(name, (if is_slide { " m/s" } else { " rad/s" }, None))
+            MjtSensor::mjSENS_JOINTVEL => scalar("velocity", (if is_slide { " m/s" } else { " rad/s" }, None)),
+            MjtSensor::mjSENS_JOINTLIMITVEL => scalar("limit velocity", (if is_slide { " m/s" } else { " rad/s" }, None)),
+            MjtSensor::mjSENS_JOINTACTFRC => {
+                let [low, high] = model.jnt_actfrcrange()[objid];
+                let range = (model.jnt_actfrclimited()[objid] && low < high).then_some(low..=high);
+                scalar("actuator force", (if is_slide { " N" } else { " N m" }, range))
             }
-            MjtSensor::mjSENS_JOINTACTFRC | MjtSensor::mjSENS_JOINTLIMITFRC => {
-                let name = if sensor_type == MjtSensor::mjSENS_JOINTACTFRC { "actuator force" } else { "limit force" };
-                scalar(name, (if is_slide { " N" } else { " N m" }, None))
-            }
+            MjtSensor::mjSENS_JOINTLIMITFRC => scalar("limit force", (if is_slide { " N" } else { " N m" }, None)),
 
-            MjtSensor::mjSENS_TENDONPOS | MjtSensor::mjSENS_TENDONLIMITPOS => {
-                let name = if sensor_type == MjtSensor::mjSENS_TENDONPOS { "length" } else { "limit distance" };
-                scalar(name, (if is_spatial_tendon { " m" } else { "" }, None))
+            MjtSensor::mjSENS_TENDONPOS => {
+                let [low, high] = model.tendon_range()[objid];
+                let range = (model.tendon_limited()[objid] && low < high).then_some(low..=high);
+                scalar("length", (if is_spatial_tendon { " m" } else { "" }, range))
             }
-            MjtSensor::mjSENS_TENDONVEL | MjtSensor::mjSENS_TENDONLIMITVEL => {
-                let name = if sensor_type == MjtSensor::mjSENS_TENDONVEL { "velocity" } else { "limit velocity" };
-                scalar(name, (if is_spatial_tendon { " m/s" } else { "" }, None))
-            }
-            MjtSensor::mjSENS_TENDONACTFRC | MjtSensor::mjSENS_TENDONLIMITFRC => {
-                let name = if sensor_type == MjtSensor::mjSENS_TENDONACTFRC { "actuator force" } else { "limit force" };
-                scalar(name, (if is_spatial_tendon { " N" } else { "" }, None))
-            }
+            MjtSensor::mjSENS_TENDONLIMITPOS => scalar("limit distance", (if is_spatial_tendon { " m" } else { "" }, None)),
+            MjtSensor::mjSENS_TENDONVEL => scalar("velocity", (if is_spatial_tendon { " m/s" } else { "" }, None)),
+            MjtSensor::mjSENS_TENDONLIMITVEL => scalar("limit velocity", (if is_spatial_tendon { " m/s" } else { "" }, None)),
+            MjtSensor::mjSENS_TENDONACTFRC => scalar("actuator force", (if is_spatial_tendon { " N" } else { "" }, None)),
+            MjtSensor::mjSENS_TENDONLIMITFRC => scalar("limit force", (if is_spatial_tendon { " N" } else { "" }, None)),
 
             // The sensor has one value per actuator output; an orientation actuator has one
             // output per axis.
@@ -161,7 +159,15 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
                     MjtSensor::mjSENS_ACTUATORVEL => "velocity",
                     _ => "force"
                 };
-                if sensor_dim == 3 { xyz(name, unit) } else { scalar(name, (unit, None)) }
+                let force_limited = sensor_type == MjtSensor::mjSENS_ACTUATORFRC
+                    && model.actuator_forcelimited()[objid]
+                    && model.actuator_biastype()[objid] != MjtBias::mjBIAS_DCMOTOR;
+                let [low, high] = model.actuator_forcerange()[objid];
+                if sensor_dim == 3 {
+                    labelled(name, &XYZ_COMPONENTS, (force_limited && high > 0.0).then_some(-high..=high), unit)
+                } else {
+                    scalar(name, (unit, (force_limited && low < high).then_some(low..=high)))
+                }
             }
 
             MjtSensor::mjSENS_BALLQUAT | MjtSensor::mjSENS_FRAMEQUAT => {
