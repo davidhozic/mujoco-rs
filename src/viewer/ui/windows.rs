@@ -22,17 +22,18 @@ const XYZ_COMPONENTS: [&str; 3] = ["x", "y", "z"];
 /// Names of the components of a quaternion, in `qpos` or `sensordata` order.
 const QUAT_COMPONENTS: [&str; 4] = ["qw", "qx", "qy", "qz"];
 
-/// Cached display information about one component of an actuator control (one `ctrl` entry), of a
-/// joint position (one `qpos` entry) or of a sensor value (one `sensordata` entry).
+/// Cached display information about one component of an element (e.g., sensor, joint, etc.).
+/// One component can have multiple sub-components (e.g., a vector has x, y and z).
 pub(super) struct ComponentDisplayInfo {
-    /// Name of the component. [`None`] when the component has no name and is the only component
-    /// of its owner, which then needs no label.
-    label: Option<String>,
+    /// Name of the component or [`None`] when the component shows no label.
+    name: Option<String>,
     /// Range of the slider (actuator, joint) or the progress bar (sensor) of the component, or
     /// [`None`] when the component has no natural range and shows a plain value instead.
     range: Option<RangeInclusive<MjtNum>>,
     /// Unit suffix of the value.
     unit: &'static str,
+    /// The name of each sub-component (e.g., vectors have x, y, z).
+    sub_component_names: &'static [&'static str],
 }
 
 /// Cached display information about one element (sensor/joint/actuator).
@@ -42,20 +43,16 @@ pub(super) enum ElementDisplayInfo {
         /// Name of the element. Auto-generated to be 'Sensor/Joint/Actuator <0->' when not named.
         name: String,
     },
-    /// An element whose values are shown, one row per repetition of `components`.
+    /// An element whose values are shown, one row per component.
     Full {
         /// Name of the element. Auto-generated to be 'Sensor/Joint/Actuator <0->' when not named.
         name: String,
         /// Address of the first component of the element inside its data array (`ctrl`, `qpos`
         /// or `sensordata`).
         adr_start: usize,
-        /// Display information of each component of one row, in data array order.
-        /// The subboxes represent rows (name, components).
-        components: Box<[
-            (Option<String>, Box<[ComponentDisplayInfo]>)
-        ]>,
-        /// Number of repetitions of the initial elements inside `components`. There will be `n_replicate` of
-        /// `components` created.
+        /// Display information of each component, in data array order.
+        components: Box<[ComponentDisplayInfo]>,
+        /// Number of times that `components` repeats in the data array.
         n_replicate: usize,
     },
 }

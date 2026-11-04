@@ -41,7 +41,7 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
                 // Most actuator types define no input names. An actuator with more than one
                 // input then shows the input index, an actuator with one input shows no label.
                 let input_name = model.actuator_input_name(idx_actuator, idx_in);
-                let label = input_name
+                let name = input_name
                     .map(str::to_owned)
                     .or_else(|| (num_inputs > 1).then(|| idx_in.to_string()));
 
@@ -60,10 +60,10 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
                     _ => ""
                 };
 
-                ComponentDisplayInfo { label, range: Some(range), unit }
+                ComponentDisplayInfo { name, range: Some(range), unit, sub_component_names: &[""] }
             }).collect();
 
-        ElementDisplayInfo::Full { name, adr_start, components: Box::new([(None, components)]), n_replicate: 1 }
+        ElementDisplayInfo::Full { name, adr_start, components, n_replicate: 1 }
     })
 }
 
@@ -106,7 +106,6 @@ pub fn show(
                     });
                 }
                 ElementDisplayInfo::Full { name, adr_start, components, .. } => {
-                    let components = &components[0].1;
                     let actuator_ctrl = &mut ctrl_mut[*adr_start..*adr_start + components.len()];
                     ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
                         if components.is_empty() {
@@ -120,8 +119,8 @@ pub fn show(
                             .show(ui, |ui|
                         {
                             for (component, ctrl) in components.iter().zip(actuator_ctrl) {
-                                if let Some(label) = &component.label {
-                                    ui.label(RichText::new(label).font(SECONDARY_FONT));
+                                if let Some(name) = &component.name {
+                                    ui.label(RichText::new(name).font(SECONDARY_FONT));
                                 }
                                 ui.add(
                                     egui::Slider::new(ctrl, component.range.clone().unwrap())

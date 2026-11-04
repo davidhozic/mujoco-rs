@@ -70,6 +70,54 @@ pub(super) fn name_rgb_row(ui: &mut egui::Ui, name: &str, rgb: &mut [f32; 3]) {
     ui.end_row();
 }
 
+/// Pager that shows only the widgets of the current page, followed by buttons that change the page.
+pub(super) struct WidgetPage<'p> {
+    widgets_per_page: &'p mut usize,
+    widgets_added: usize,
+    page: &'p mut usize,
+}
+
+impl<'p> WidgetPage<'p> {
+    /// Creates an empty pager that shows `page` with `widgets_per_page` of widgets on each page.
+    pub(super) fn new(page: &'p mut usize, widgets_per_page: &'p mut usize) -> Self {
+        Self { widgets_added: 0, page, widgets_per_page }
+    }
+
+    /// Tries to add a `widget` using `ui` ([`egui::Ui`]). The widget is only added if it belongs
+    /// to the currently set page.
+    /// Returns [`None`] when the widget is on a different page, otherwise returns
+    /// whatever `widget` returned.
+    pub(super) fn paged<R>(&mut self, ui: &mut egui::Ui, widget: impl FnOnce(&mut egui::Ui) -> R) -> Option<R> {
+        let required_page = self.widgets_added / *self.widgets_per_page;
+        self.widgets_added += 1;
+        (required_page == *self.page).then(|| {
+            widget(ui)
+        })
+    }
+}
+
+impl egui::Widget for WidgetPage<'_> {
+    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+        if self.widgets_added <= *self.widgets_per_page {
+            return ui.allocate_response(egui::Vec2::ZERO, egui::Sense::empty());
+        }
+
+        ui.horizontal(|ui| {
+            // Arrows ⬅ and ➡ are egui's special supported emojis.
+            // See https://docs.rs/egui/0.36.1/egui/special_emojis/.
+            if ui.button("⬅").clicked() {
+                *self.page = self.page.saturating_sub(1);
+            }
+            if ui.button("➡").clicked() {
+                *self.page = (*self.page + 1).min((self.widgets_added / *self.widgets_per_page).saturating_sub(1));
+            }
+            if ui.button("Expand").clicked() {
+                *self.widgets_per_page *= 2;
+            }
+        }).response
+    }
+}
+
 /// Single-line search field that holds a name prefix for filtering a list.
 #[derive(Debug)]
 pub(super) struct SearchBar {

@@ -29,24 +29,25 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
         let adr_start = model.jnt_qposadr()[idx_joint] as usize;
         let limits = model.jnt_range()[idx_joint];
 
-        let components = match model.jnt_type()[idx_joint] {
+        let components: Box<[_]> = match model.jnt_type()[idx_joint] {
             // A free joint holds no limit and no natural range for its position, so each
             // translation component takes a numeric input.
             MjtJoint::mjJNT_FREE => {
-                let translation = XYZ_COMPONENTS.map(|label| {
-                    ComponentDisplayInfo { label: Some(label.to_owned()), range: None, unit: " m" }
-                });
-                let rotation = QUAT_COMPONENTS.map(|label| {
-                    ComponentDisplayInfo { label: Some(label.to_owned()), range: Some(-1.0..=1.0), unit: "" }
-                });
-                translation.into_iter().chain(rotation).collect()
+                Box::new([
+                    ComponentDisplayInfo {
+                        name: Some("position".to_owned()), range: None, unit: " m", sub_component_names: &XYZ_COMPONENTS
+                    },
+                    ComponentDisplayInfo {
+                        name: Some("orientation".to_owned()), range: Some(-1.0..=1.0), unit: "", sub_component_names: &QUAT_COMPONENTS
+                    },
+                ])
             }
 
             // A quaternion component always lies inside the unit sphere.
             MjtJoint::mjJNT_BALL => {
-                QUAT_COMPONENTS.map(|label| {
-                    ComponentDisplayInfo { label: Some(label.to_owned()), range: Some(-1.0..=1.0), unit: "" }
-                }).into()
+                Box::new([ComponentDisplayInfo {
+                    name: Some("orientation".to_owned()), range: Some(-1.0..=1.0), unit: "", sub_component_names: &QUAT_COMPONENTS
+                }])
             }
 
             // A slide or a hinge joint holds one position component, which the limit applies
@@ -59,11 +60,13 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
                     -1.0..=1.0
                 } else { -PI..=PI };
                 let unit = if is_slide { " m" } else { " rad" };
-                [ComponentDisplayInfo { label: None, range: Some(range), unit }].into()
+                Box::new([ComponentDisplayInfo {
+                    name: Some("position".to_owned()), range: Some(range), unit, sub_component_names: &[""]
+                }])
             }
         };
 
-        ElementDisplayInfo::Full { name, adr_start, components: Box::new([(None, components)]), n_replicate: 1 }
+        ElementDisplayInfo::Full { name, adr_start, components, n_replicate: 1 }
     })
 }
 
@@ -106,17 +109,20 @@ pub fn show(
                     });
                 }
                 ElementDisplayInfo::Full { name, adr_start, components, .. } => {
-                    let components = &components[0].1;
-                    let joint_qpos = &mut qpos[*adr_start..*adr_start + components.len()];
+                    let n_components = components.iter().map(|component| component.sub_component_names.len()).sum::<usize>();
+                    let joint_qpos = &mut qpos[*adr_start..*adr_start + n_components];
                     ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
                         egui::Grid::new("joint_qpos_ui_grid")
                             .spacing(egui::vec2(INSPECTOR_GRID_SPACING_X, INSPECTOR_GRID_SPACING_Y))
                             .min_col_width(0.0)
                             .show(ui, |ui|
                         {
-                            for (component, value) in components.iter().zip(joint_qpos.iter_mut()) {
-                                if let Some(label) = &component.label {
-                                    ui.label(RichText::new(label).font(SECONDARY_FONT));
+                            let sub_components = components.iter().flat_map(|component| {
+                                component.sub_component_names.iter().map(move |sub_name| (component, sub_name))
+                            });
+                            for ((component, sub_name), value) in sub_components.zip(joint_qpos.iter_mut()) {
+                                if !sub_name.is_empty() {
+                                    ui.label(RichText::new(*sub_name).font(SECONDARY_FONT));
                                 }
 
                                 // A slider must not clamp: the simulation reaches values outside
