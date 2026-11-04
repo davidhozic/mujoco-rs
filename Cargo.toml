@@ -62,8 +62,8 @@ name = "logging"
 path = "examples/simulation/logging.rs"
 
 [[example]]
-name = "actuator_inputs"
-path = "examples/visualization/viewer/actuator_inputs.rs"
+name = "control_windows"
+path = "examples/visualization/viewer/control_windows.rs"
 required-features = ["viewer-ui"]
 
 [[example]]
