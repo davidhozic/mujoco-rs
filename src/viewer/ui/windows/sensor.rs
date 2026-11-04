@@ -115,8 +115,8 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
             MjtSensor::mjSENS_CAMPROJECTION => labelled("projection", &SENSOR_CAMPROJECTION_COMPONENTS, None, " px"),
 
             MjtSensor::mjSENS_JOINTPOS => {
-                let range = model.jnt_limited()[objid]
-                    .then(|| { let [low, high] = model.jnt_range()[objid]; low..=high });
+                let [low, high] = model.jnt_range()[objid];
+                let range = (model.jnt_limited()[objid] && low < high).then_some(low..=high);
                 scalar("position", (if is_slide { " m" } else { " rad" }, range))
             }
             // The value is the distance to the limit, not a position inside the joint range.
@@ -213,14 +213,18 @@ pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo
                 if objtype == MjtObjBase::mjOBJ_SITE {
                     1
                 } else {
+                    // MuJoCo accepts any camera resolution and multiplies it the same way.
                     let [width, height] = model.cam_resolution()[objid];
-                    width as usize * height as usize
+                    width.max(0) as usize * height.max(0) as usize
                 }
             }
             MjtSensor::mjSENS_CONTACT => model.sensor_intprm()[sensor_id][2] as usize,
             _ => 1
         };
         let info = ElementDisplayInfo::Full { name, adr_start, components, n_replicate };
+        // Assert only in development, as this is something that is not left-up to ambiguity.
+        // If this doesn't pass, we have a bug.
+        // To anyone reading this, please report it if such a bug exits :).
         debug_assert_eq!(info.replica_len() * n_replicate, sensor_dim, "unexpected dimension of sensor type {sensor_type:?}");
         info
     })
@@ -247,13 +251,13 @@ pub fn show(
     pages: &mut [(usize, usize)], shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
 )
 {
-    // Reset the pages and clear the search bar when the window is closed.
+    // Clear the text inside the window's search bar when the window is closed.
     if !*open {
-        pages.fill((0, MAX_WIDGETS_PER_ELEMENT));
         search_bar.clear();
     }
 
     egui::Window::new("Sensor")
+        .id(egui::Id::new("mujoco_rs_sensor_window"))
         .open(open)
         .scroll(true)
         .drag_to_scroll(egui::scroll_area::DragScroll::Always)
@@ -269,24 +273,23 @@ pub fn show(
 
         /* Sensor widgets */
         let sensordata = lock.data_passive.sensordata();
-        for (info, (page, widgets_per_page)) in sensor_info.iter().zip(pages.iter_mut()) {
+        for (sensor_id, (info, (page, widgets_per_page))) in sensor_info.iter().zip(pages.iter_mut()).enumerate() {
             if let Some(query) = search_bar.text() && !info.name().starts_with(query) {
                 continue;
             }
 
             match info {
                 ElementDisplayInfo::NameOnly { name } => {
-                    ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
+                    egui::CollapsingHeader::new(RichText::new(name).font(MAIN_FONT)).id_salt(sensor_id).show(ui, |ui| {
                         ui.label(RichText::new("unsupported").font(SECONDARY_FONT));
                     });
                 }
                 ElementDisplayInfo::Full { name, adr_start, components, n_replicate } => {
                     let n_components = info.replica_len();
                     let sensor_data = &sensordata[*adr_start..*adr_start + n_components * *n_replicate];
-                    ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
-                        // A user sensor can have dim 0; chunks_exact(0) panics,
-                        // but the data is then empty.
-                        if n_components == 0 {
+                    egui::CollapsingHeader::new(RichText::new(name).font(MAIN_FONT)).id_salt(sensor_id).show(ui, |ui| {
+                        // A user sensor or a camera with a zero resolution gives dim 0.
+                        if sensor_data.is_empty() {
                             ui.label(RichText::new("no dimension").font(SECONDARY_FONT));
                             return;
                         }

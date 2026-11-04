@@ -83,6 +83,7 @@ pub fn show(
     }
 
     egui::Window::new("Joint")
+        .id(egui::Id::new("mujoco_rs_joint_window"))
         .scroll(true)
         .drag_to_scroll(egui::scroll_area::DragScroll::Always)
         .open(open)
@@ -98,20 +99,20 @@ pub fn show(
         search_bar.show(ui);
 
         /* Joint widgets */
-        for info in joint_info {
+        for (joint_id, info) in joint_info.iter().enumerate() {
             if let Some(query) = search_bar.text() && !info.name().starts_with(query) {
                 continue;
             }
 
             match info {
                 ElementDisplayInfo::NameOnly { name } => {
-                    ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
+                    egui::CollapsingHeader::new(RichText::new(name).font(MAIN_FONT)).id_salt(joint_id).show(ui, |ui| {
                         ui.label(RichText::new("unsupported").font(SECONDARY_FONT));
                     });
                 }
                 ElementDisplayInfo::Full { name, adr_start, components, .. } => {
                     let mut rest = &mut qpos[*adr_start..];
-                    ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
+                    egui::CollapsingHeader::new(RichText::new(name).font(MAIN_FONT)).id_salt(joint_id).show(ui, |ui| {
                         egui::Grid::new("joint_qpos_ui_grid")
                             .spacing(egui::vec2(INSPECTOR_GRID_SPACING_X, INSPECTOR_GRID_SPACING_Y))
                             .min_col_width(0.0)

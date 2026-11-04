@@ -80,6 +80,7 @@ pub fn show(
     }
 
     egui::Window::new("Actuator")
+        .id(egui::Id::new("mujoco_rs_actuator_window"))
         .scroll(true)
         .drag_to_scroll(egui::scroll_area::DragScroll::Always)
         .open(open)
@@ -95,20 +96,20 @@ pub fn show(
         search_bar.show(ui);
 
         /* Actuator widgets */
-        for info in actuator_info {
+        for (actuator_id, info) in actuator_info.iter().enumerate() {
             if let Some(query) = search_bar.text() && !info.name().starts_with(query) {
                 continue;
             }
 
             match info {
                 ElementDisplayInfo::NameOnly { name } => {
-                    ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
+                    egui::CollapsingHeader::new(RichText::new(name).font(MAIN_FONT)).id_salt(actuator_id).show(ui, |ui| {
                         ui.label(RichText::new("unsupported").font(SECONDARY_FONT));
                     });
                 }
                 ElementDisplayInfo::Full { name, adr_start, components, .. } => {
                     let actuator_ctrl = &mut ctrl_mut[*adr_start..*adr_start + components.len()];
-                    ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
+                    egui::CollapsingHeader::new(RichText::new(name).font(MAIN_FONT)).id_salt(actuator_id).show(ui, |ui| {
                         if components.is_empty() {
                             ui.label(RichText::new("no inputs").font(SECONDARY_FONT));
                             return;

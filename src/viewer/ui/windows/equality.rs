@@ -31,6 +31,7 @@ pub fn show(
     }
 
     egui::Window::new("Equality")
+        .id(egui::Id::new("mujoco_rs_equality_window"))
         .scroll(true)
         .drag_to_scroll(egui::scroll_area::DragScroll::Always)
         .open(open)

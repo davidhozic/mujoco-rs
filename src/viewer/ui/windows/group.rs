@@ -8,6 +8,7 @@ use crate::cast_mut_info;
 /// Shows the group window when `open` is set.
 pub fn show(ui: &mut egui::Ui, open: &mut bool, options: &mut MjvOption) {
     egui::Window::new("Group")
+        .id(egui::Id::new("mujoco_rs_group_window"))
         .open(open)
         .resizable(false)
         .show(ui, |ui|

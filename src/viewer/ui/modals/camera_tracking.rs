@@ -9,13 +9,21 @@ use crate::viewer::ViewerSharedState;
 use crate::viewer::ui::MAIN_FONT;
 use crate::util::LockUnpoison;
 
+/// Maximum height of the body list in the camera tracking modal, in points.
 const CAMERA_MODAL_MAX_HEIGHT: f32 = 300.0;
+/// Number of body buttons in one row of the camera tracking modal.
 const CAMERA_MODAL_BUTTONS_PER_ROW: usize = 5;
+/// Width of a body button in the camera tracking modal, in points.
 const CAMERA_MODAL_BUTTON_WIDTH: f32 = 100.0;
+/// Height of a body button in the camera tracking modal, in points.
 const CAMERA_MODAL_BUTTON_HEIGHT: f32 = 35.0;
+/// Size of one grid cell (body button) in the camera tracking modal, in points.
 const CAMERA_MODAL_CELL_SIZE: egui::Vec2 = egui::Vec2 { x: CAMERA_MODAL_BUTTON_WIDTH, y: CAMERA_MODAL_BUTTON_HEIGHT };
+/// Corner radius of a body button in the camera tracking modal, in points.
 const CAMERA_MODAL_BUTTON_ROUNDING: f32 = 4.0;
+/// Gray level of a body button that the pointer is not over.
 const CAMERA_MODAL_BUTTON_COLOR_DEFAULT: u8 = 40;
+/// Gray level of a body button that the pointer is over.
 const CAMERA_MODAL_BUTTON_COLOR_HOVERED: u8 = 60;
 
 /// Shows the body selection modal for camera tracking when `open` is set. A click on a body
@@ -29,7 +37,7 @@ pub fn show(
         return;
     }
 
-    let modal = egui::Modal::new(Id::new("select_body_tracking"))
+    let modal = egui::Modal::new(Id::new("mujoco_rs_select_body_tracking"))
         .show(ui, |ui|
     {
         ui.heading("Select the body to track");
