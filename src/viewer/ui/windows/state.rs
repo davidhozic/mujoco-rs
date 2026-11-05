@@ -85,10 +85,10 @@ pub fn show(
             .show(ui, |ui|
         {
             let mut local_state;
-            for (size, name) in state_sizes.iter()
+            for ((size, name), _) in state_sizes.iter()
                 .zip(STATE_NAMES)
                 .zip(state_window_enables.iter())
-                .filter(|((_, _), enabled)| **enabled).map(|(size_name, _)| size_name)
+                .filter(|(_, enabled)| **enabled)
             {
                 (local_state, state) = state.split_at(*size);
                 ui.label(name);
