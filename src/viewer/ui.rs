@@ -17,6 +17,7 @@ use egui_winit::egui;
 use crate::wrappers::mj_visualization::{MjvOption, MjvCamera, MjvScene};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
 use crate::wrappers::mj_model::{MjModel, MjtObjBase};
+use crate::wrappers::mj_data::MjtState;
 
 use windows::sensor::MAX_WIDGETS_PER_ELEMENT;
 use windows::ElementDisplayInfo;
@@ -66,6 +67,7 @@ pub(crate) struct ViewerUI {
     equality_window: bool,
     group_window: bool,
     sensor_window: bool,
+    state_window: bool,
     screenshot_viewport_only: bool,
     screenshot_depth: bool,
 
@@ -82,6 +84,8 @@ pub(crate) struct ViewerUI {
     /* Window page states */
     /// Page and widgets per page of each sensor, in ID order.
     sensor_pages: Vec<(usize, usize)>,
+    /// Per-state-type flags that show the values of that type in the state window.
+    state_window_enables: [bool; MjtState::mjNSTATE as usize],
 
     /* Model-related */
     camera_names: Vec<String>,
@@ -89,6 +93,8 @@ pub(crate) struct ViewerUI {
     joint_info: Vec<ElementDisplayInfo>,
     sensor_info: Vec<ElementDisplayInfo>,
     equality_names: Vec<String>,
+    /// Size of each state element, in [`MjtState`] bit order.
+    state_sizes: Vec<usize>,
 
     /* User-related */
     user_ui_callbacks: Vec<UiCallback>,
@@ -123,12 +129,14 @@ impl ViewerUI {
             joint_info: Vec::new(),
             sensor_info: Vec::new(),
             equality_names: Vec::new(),
+            state_sizes: Vec::new(),
             user_ui_callbacks: Vec::new(),
             actuator_window: false,
             joint_window: false,
             equality_window: false,
             group_window: false,
             sensor_window: false,
+            state_window: false,
             screenshot_viewport_only: false,
             screenshot_depth: false,
             show_tracking_modal: false,
@@ -138,6 +146,7 @@ impl ViewerUI {
             sensor_search_bar: SearchBar::new("Enter sensor's name"),
             equality_search_bar: SearchBar::new("Enter equality's name"),
             sensor_pages: Vec::new(),
+            state_window_enables: [false; MjtState::mjNSTATE as usize],
         };
         viewer_ui.reset_to_model(model);
         Ok(viewer_ui)
@@ -157,6 +166,7 @@ impl ViewerUI {
         self.joint_info = windows::joint::display_infos(model).collect();
         self.sensor_info = windows::sensor::display_infos(model).collect();
         self.equality_names = windows::equality::names(model).collect();
+        self.state_sizes = windows::state::sizes(model).collect();
 
         self.sensor_pages = vec![(0, MAX_WIDGETS_PER_ELEMENT); self.sensor_info.len()];
 
@@ -233,7 +243,7 @@ impl ViewerUI {
                     panel::ui::show(
                         ui, status, window, &mut self.events, &mut self.actuator_window,
                         &mut self.joint_window, &mut self.equality_window, &mut self.group_window,
-                        &mut self.sensor_window,
+                        &mut self.sensor_window, &mut self.state_window,
                     );
 
                     /* Simulation */
@@ -294,6 +304,11 @@ impl ViewerUI {
 
             // Groups window
             windows::group::show(ui, &mut self.group_window, options);
+
+            windows::state::show(
+                ui, &mut self.state_window, &mut self.state_window_enables, &self.state_sizes,
+                shared_viewer_state
+            );
 
             /* Modals */
             // Camera tracking modal

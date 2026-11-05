@@ -35,6 +35,7 @@
   quaternion after an edit. MuJoCo normalizes the quaternion in ``qpos`` at the next step.
 - The actuator, joint, sensor and equality windows now have a search bar. The window shows only
   the elements whose name starts with the search text.
+- Added a state window for showing values of state inside |mj_data|.
 
 .. rubric:: New examples
 

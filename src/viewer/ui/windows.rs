@@ -2,6 +2,7 @@
 pub(super) mod actuator;
 pub(super) mod equality;
 pub(super) mod sensor;
+pub(super) mod state;
 pub(super) mod group;
 pub(super) mod joint;
 

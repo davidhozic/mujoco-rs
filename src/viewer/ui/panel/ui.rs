@@ -17,6 +17,7 @@ pub fn show(
     ui: &mut egui::Ui, status: &mut ViewerStatusBit, window: &Window,
     events: &mut VecDeque<UiEvent>, actuator_window: &mut bool, joint_window: &mut bool,
     equality_window: &mut bool, group_window: &mut bool, sensor_window: &mut bool,
+    state_window: &mut bool,
 )
 {
     egui::CollapsingHeader::new(RichText::new("UI").font(HEADING_FONT))
@@ -56,6 +57,7 @@ pub fn show(
             ui.toggle_value(equality_window, RichText::new("Equality").font(MAIN_FONT));
             ui.toggle_value(group_window, RichText::new("Group").font(MAIN_FONT));
             ui.toggle_value(sensor_window, RichText::new("Sensor").font(MAIN_FONT));
+            ui.toggle_value(state_window, RichText::new("State").font(MAIN_FONT));
         });
 
         ui.separator();
