@@ -71,6 +71,8 @@ An example (using the `env_logger <https://docs.rs/env_logger/0.11.11/env_logger
     }
 
 
+Run the example with ``RUST_LOG=warn``, because ``env_logger`` displays only errors by default.
+
 In the above example, the ``log``'s target is set to the Rust-module path when called from the user's code.
 The message is displayed in a format similar to the following:
 
