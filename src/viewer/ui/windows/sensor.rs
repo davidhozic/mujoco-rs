@@ -23,6 +23,12 @@ const SENSOR_BAR_WIDTH: f32 = 75.0;
 /// Corner radius of the bar of a sensor value with a natural range, in points.
 const SENSOR_BAR_CORNER_RADIUS: u8 = 3;
 
+/// The default number of digits of precisions that sensor values will be displayed with.
+pub(crate) const DEFAULT_NUM_DIGITS_SENSOR_PRECISION: usize = 3;
+
+/// The range of digits of precisions that sensor values can be displayed with.
+const SENSOR_PRECISION_RANGE: RangeInclusive<usize> = 0..=15;  // about matches f64's precision
+
 /// Initial number of widgets that an element shows on one page.
 pub const MAX_WIDGETS_PER_ELEMENT: usize = 20;
 
@@ -259,7 +265,8 @@ fn bitmask_components(
 /// Shows the sensor window when `open` is set.
 pub fn show(
     ui: &mut egui::Ui, open: &mut bool, sensor_info: &[ElementDisplayInfo], search_bar: &mut SearchBar,
-    pages: &mut [(usize, usize)], shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
+    pages: &mut [(usize, usize)], sensor_precision_digits: &mut usize,
+    shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
 )
 {
     // Clear the text inside the window's search bar when the window is closed.
@@ -281,6 +288,14 @@ pub fn show(
 
         /* Search bar */
         search_bar.show(ui);
+
+        ui.separator();
+
+        // Selector for number of digits in decimals.
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Number of decimal places").font(SECONDARY_FONT));
+            ui.add(egui::DragValue::new(sensor_precision_digits).range(SENSOR_PRECISION_RANGE));
+        });
 
         /* Sensor widgets */
         let sensordata = lock.data_passive.sensordata();
@@ -339,7 +354,7 @@ pub fn show(
                                             for (row_i, component) in components.iter().enumerate() {
                                                 let values;
                                                 (values, rest) = rest.split_at(component.sub_component_names.len());
-                                                show_sensor_row(ui, component, values, row_i == components.len() - 1);
+                                                show_sensor_row(ui, component, values, row_i == components.len() - 1, *sensor_precision_digits);
                                             }
                                         });
                                     })
@@ -361,7 +376,7 @@ pub fn show(
                                     let values;
                                     (values, rest) = rest.split_at(component.sub_component_names.len());
                                     widget_page.paged(ui, |ui| {
-                                        show_sensor_row(ui, component, values, row_i == components.len() - 1);
+                                        show_sensor_row(ui, component, values, row_i == components.len() - 1, *sensor_precision_digits);
                                     });
                                 }
                             });
@@ -376,7 +391,11 @@ pub fn show(
 }
 
 /// Shows one row (i.e., component) of a given sensor.
-fn show_sensor_row(ui: &mut egui::Ui, component: &ComponentDisplayInfo, values: &[MjtNum], is_last: bool) {
+fn show_sensor_row(
+    ui: &mut egui::Ui, component: &ComponentDisplayInfo, values: &[MjtNum], is_last: bool,
+    sensor_precision_digits: usize,
+)
+{
     // Empty labels also take a cell, so that the values of all rows share the same columns.
     ui.label(RichText::new(&component.name).font(SECONDARY_FONT));
     for (sub_name, value) in component.sub_component_names.iter().zip(values) {
@@ -390,7 +409,7 @@ fn show_sensor_row(ui: &mut egui::Ui, component: &ComponentDisplayInfo, values: 
                             (range.end() - range.start())) as f32
                     )
                     .text(
-                        RichText::new(format!("{value:.3}{}", component.unit))
+                        RichText::new(format!("{value:.sensor_precision_digits$}{}", component.unit))
                         .font(SECONDARY_FONT)
                         .color(egui::Color32::GRAY)
                     )
@@ -401,7 +420,7 @@ fn show_sensor_row(ui: &mut egui::Ui, component: &ComponentDisplayInfo, values: 
 
             None => {
                 egui::Frame::canvas(ui.style()).show(ui, |ui| {
-                    ui.label(format!("{value:.3}{}", component.unit));
+                    ui.label(format!("{value:.sensor_precision_digits$}{}", component.unit));
                 });
             }
         }

@@ -1,4 +1,5 @@
 //! A submodule of the viewer's UI representing the state window definitions.
+use std::ops::RangeInclusive;
 use std::sync::{Arc, Mutex};
 
 use egui_winit::egui;
@@ -33,6 +34,9 @@ const NUM_STATE_WINDOW_COLUMNS: usize = 3;
 
 /// The default number of digits of precisions that state values will be displayed with.
 pub(crate) const DEFAULT_NUM_DIGITS_STATE_PRECISION: usize = 3;
+
+/// The range of digits of precisions that state values can be displayed with.
+const STATE_PRECISION_RANGE: RangeInclusive<usize> = 0..=15;  // about matches f64's precision
 
 /// Returns the size of each state element of `model`, in [`MjtState`] bit order.
 pub fn sizes(model: &MjModel) -> impl Iterator<Item = usize> {
@@ -76,7 +80,7 @@ pub fn show(
         // Selector for number of digits in decimals.
         ui.horizontal(|ui| {
             ui.label(RichText::new("Number of decimal places").font(SECONDARY_FONT));
-            ui.add(egui::DragValue::new(state_precision_digits));
+            ui.add(egui::DragValue::new(state_precision_digits).range(STATE_PRECISION_RANGE));
         });
 
         /* States display */

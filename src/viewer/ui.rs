@@ -14,6 +14,7 @@ use egui_glow::glow::{self, HasContext};
 use egui_winit::winit::window::Window;
 use egui_winit::egui;
 
+use crate::viewer::ui::windows::sensor::DEFAULT_NUM_DIGITS_SENSOR_PRECISION;
 use crate::viewer::ui::windows::state::DEFAULT_NUM_DIGITS_STATE_PRECISION;
 use crate::wrappers::mj_visualization::{MjvOption, MjvCamera, MjvScene};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
@@ -103,6 +104,12 @@ pub(crate) struct ViewerUI {
     /// are turned into a [`String`].
     state_precision_digits: usize,
 
+    /* Sensor-related */
+    /// The number of decimal places to display sensor values with.
+    /// The truncation follows semantics of [`format`], with which the values
+    /// are turned into a [`String`].
+    sensor_precision_digits: usize,
+
     /* User-related */
     user_ui_callbacks: Vec<UiCallback>,
 
@@ -155,6 +162,7 @@ impl ViewerUI {
             sensor_pages: Vec::new(),
             state_window_enables: [false; MjtState::mjNSTATE as usize],
             state_precision_digits: DEFAULT_NUM_DIGITS_STATE_PRECISION,
+            sensor_precision_digits: DEFAULT_NUM_DIGITS_SENSOR_PRECISION,
         };
         viewer_ui.reset_to_model(model);
         Ok(viewer_ui)
@@ -301,7 +309,7 @@ impl ViewerUI {
             // Sensors window
             windows::sensor::show(
                 ui, &mut self.sensor_window, &self.sensor_info, &mut self.sensor_search_bar,
-                &mut self.sensor_pages, shared_viewer_state
+                &mut self.sensor_pages, &mut self.sensor_precision_digits, shared_viewer_state
             );
 
             // Equalities window
