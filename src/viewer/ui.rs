@@ -14,6 +14,7 @@ use egui_glow::glow::{self, HasContext};
 use egui_winit::winit::window::Window;
 use egui_winit::egui;
 
+use crate::viewer::ui::windows::state::DEFAULT_NUM_DIGITS_STATE_PRECISION;
 use crate::wrappers::mj_visualization::{MjvOption, MjvCamera, MjvScene};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
 use crate::wrappers::mj_model::{MjModel, MjtObjBase};
@@ -84,8 +85,6 @@ pub(crate) struct ViewerUI {
     /* Window page states */
     /// Page and widgets per page of each sensor, in ID order.
     sensor_pages: Vec<(usize, usize)>,
-    /// Per-state-type flags that show the values of that type in the state window.
-    state_window_enables: [bool; MjtState::mjNSTATE as usize],
 
     /* Model-related */
     camera_names: Vec<String>,
@@ -93,8 +92,16 @@ pub(crate) struct ViewerUI {
     joint_info: Vec<ElementDisplayInfo>,
     sensor_info: Vec<ElementDisplayInfo>,
     equality_names: Vec<String>,
+
+    /* MjData-state-related */
     /// Size of each state element, in [`MjtState`] bit order.
     state_sizes: Vec<usize>,
+    /// Per-state-type flags that show the values of that type in the state window.
+    state_window_enables: [bool; MjtState::mjNSTATE as usize],
+    /// The number of decimal precision of precision to display numbers to.
+    /// The truncation follows semantics of [`format`], with which the values
+    /// are turned into a [`String`].
+    state_precision_digits: usize,
 
     /* User-related */
     user_ui_callbacks: Vec<UiCallback>,
@@ -147,6 +154,7 @@ impl ViewerUI {
             equality_search_bar: SearchBar::new("Enter equality's name"),
             sensor_pages: Vec::new(),
             state_window_enables: [false; MjtState::mjNSTATE as usize],
+            state_precision_digits: DEFAULT_NUM_DIGITS_STATE_PRECISION,
         };
         viewer_ui.reset_to_model(model);
         Ok(viewer_ui)
@@ -307,7 +315,7 @@ impl ViewerUI {
 
             windows::state::show(
                 ui, &mut self.state_window, &mut self.state_window_enables, &self.state_sizes,
-                shared_viewer_state
+                &mut self.state_precision_digits, shared_viewer_state
             );
 
             /* Modals */

@@ -31,6 +31,9 @@ const STATE_NAMES: [&str; MjtState::mjNSTATE as usize] = [
 /// Number of columns that the state window has for its checkboxes section.
 const NUM_STATE_WINDOW_COLUMNS: usize = 3;
 
+/// The default number of digits of precisions that state values will be displayed with.
+pub(crate) const DEFAULT_NUM_DIGITS_STATE_PRECISION: usize = 3;
+
 /// Returns the size of each state element of `model`, in [`MjtState`] bit order.
 pub fn sizes(model: &MjModel) -> impl Iterator<Item = usize> {
     (0..MjtState::mjNSTATE as u32).map(|bit| model.state_size(1 << bit))
@@ -43,7 +46,7 @@ pub fn sizes(model: &MjModel) -> impl Iterator<Item = usize> {
 pub fn show(
     ui: &mut egui::Ui, open: &mut bool,
     state_window_enables: &mut [bool; MjtState::mjNSTATE as usize], state_sizes: &[usize],
-    shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
+    state_precision_digits: &mut usize, shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
 )
 {
     egui::Window::new("State")
@@ -66,6 +69,14 @@ pub fn show(
                     ui.end_row();
                 }
             }
+        });
+
+        ui.separator();
+
+        // Selector for number of digits in decimals.
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Number of decimal places").font(SECONDARY_FONT));
+            ui.add(egui::DragValue::new(state_precision_digits));
         });
 
         /* States display */
@@ -91,8 +102,8 @@ pub fn show(
                 .filter(|(_, enabled)| **enabled)
             {
                 (local_state, state) = state.split_at(*size);
-                ui.label(name);
-                ui.label(format!("{local_state:?}"));
+                ui.label(RichText::new(name).font(SECONDARY_FONT));
+                ui.label(RichText::new(format!("{local_state:.state_precision_digits$?}")).font(SECONDARY_FONT));
                 ui.end_row();
             }
         });
