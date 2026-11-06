@@ -5,7 +5,9 @@ use egui_winit::winit::window::Window;
 use egui_winit::egui;
 use egui::RichText;
 
+use crate::viewer::ui::windows::sensor::SensorDisplayInfo;
 use crate::viewer::ui::{UiEvent, HEADING_FONT, MAIN_FONT};
+use crate::viewer::ui::windows::state::StateDisplayInfo;
 use crate::viewer::ViewerStatusBit;
 
 /// Shows the UI section of the side panel.
@@ -16,8 +18,8 @@ use crate::viewer::ViewerStatusBit;
 pub fn show(
     ui: &mut egui::Ui, status: &mut ViewerStatusBit, window: &Window,
     events: &mut VecDeque<UiEvent>, actuator_window: &mut bool, joint_window: &mut bool,
-    equality_window: &mut bool, group_window: &mut bool, sensor_window: &mut bool,
-    state_window: &mut bool,
+    equality_window: &mut bool, group_window: &mut bool, sensor_info: &mut SensorDisplayInfo,
+    state_info: &mut StateDisplayInfo,
 )
 {
     egui::CollapsingHeader::new(RichText::new("UI").font(HEADING_FONT))
@@ -56,8 +58,8 @@ pub fn show(
             ui.toggle_value(joint_window, RichText::new("Joint").font(MAIN_FONT));
             ui.toggle_value(equality_window, RichText::new("Equality").font(MAIN_FONT));
             ui.toggle_value(group_window, RichText::new("Group").font(MAIN_FONT));
-            ui.toggle_value(sensor_window, RichText::new("Sensor").font(MAIN_FONT));
-            ui.toggle_value(state_window, RichText::new("State").font(MAIN_FONT));
+            ui.toggle_value(&mut sensor_info.open, RichText::new("Sensor").font(MAIN_FONT));
+            ui.toggle_value(&mut state_info.open, RichText::new("State").font(MAIN_FONT));
         });
 
         ui.separator();

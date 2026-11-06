@@ -5,9 +5,9 @@ use std::sync::{Arc, Mutex};
 use egui_winit::egui;
 use egui::RichText;
 
+use crate::viewer::ui::widget_extras::{DEFAULT_WIDGETS_PER_ELEMENT, SearchBar, WidgetPage};
 use crate::wrappers::mj_model::{MjModel, MjtObjBase, MjtJoint, MjtBias, MjtWrap};
 use crate::wrappers::{MjtConDataField, MjtRayDataField, MjtSensor};
-use crate::viewer::ui::widget_extras::{SearchBar, WidgetPage};
 use crate::viewer::ui::{MAIN_FONT, SECONDARY_FONT};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::viewer::ViewerSharedState;
@@ -24,7 +24,7 @@ const SENSOR_BAR_WIDTH: f32 = 75.0;
 const SENSOR_BAR_CORNER_RADIUS: u8 = 3;
 
 /// The default number of digits of precision that sensor values will be displayed with.
-pub const DEFAULT_NUM_DIGITS_SENSOR_PRECISION: usize = 3;
+const DEFAULT_NUM_DIGITS_SENSOR_PRECISION: usize = 3;
 
 /// The range of digits of precision that sensor values can be displayed with.
 const SENSOR_PRECISION_RANGE: RangeInclusive<usize> = 0..=15;  // About matches f64's precision.
@@ -77,8 +77,51 @@ const SENSOR_FROMTO_COMPONENTS: [&str; 6] = ["x1", "y1", "z1", "x2", "y2", "z2"]
 /// Names of the components of a `camprojection` sensor, in `sensordata` order.
 const SENSOR_CAMPROJECTION_COMPONENTS: [&str; 2] = ["u", "v"];
 
+/// Cached display information and user settings of the sensor window.
+pub struct SensorDisplayInfo {
+    /// Whether the window is open.
+    pub open: bool,
+    /// Information of each sensor, in ID order.
+    elements: Vec<SensorElementInfo>,
+    /// The search bar of the window.
+    search_bar: SearchBar,
+    /// The number of decimal places to display sensor values with.
+    /// The rounding follows semantics of [`format`], with which the values
+    /// are turned into a [`String`].
+    precision_digits: usize,
+}
+
+impl SensorDisplayInfo {
+    /// Creates the information of a closed window with no model data.
+    pub fn new() -> Self {
+        Self {
+            open: false,
+            elements: Vec::new(),
+            search_bar: SearchBar::new("Enter sensor's name"),
+            precision_digits: DEFAULT_NUM_DIGITS_SENSOR_PRECISION,
+        }
+    }
+
+    /// Rebuilds the model-dependent information from `model`.
+    pub fn reset_to_model(&mut self, model: &MjModel) {
+        self.elements = display_infos(model)
+            .map(|display| SensorElementInfo { display, page: 0, widgets_per_page: DEFAULT_WIDGETS_PER_ELEMENT })
+            .collect();
+    }
+}
+
+/// Display information and user settings of one sensor.
+struct SensorElementInfo {
+    /// Cached display information of the sensor.
+    display: ElementDisplayInfo,
+    /// Current page of the sensor's values.
+    page: usize,
+    /// Number of widgets per page.
+    widgets_per_page: usize,
+}
+
 /// Returns the display information of each sensor of `model`, in ID order.
-pub fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo> {
+fn display_infos(model: &MjModel) -> impl Iterator<Item = ElementDisplayInfo> {
     (0..model.nsensor() as usize).map(|sensor_id| {
         let name = model.id_to_name(MjtObjBase::mjOBJ_SENSOR, sensor_id)
             .map(|name| name.to_string())
@@ -259,13 +302,13 @@ fn bitmask_components(
         }).collect()
 }
 
-/// Shows the sensor window when `open` is set.
+/// Shows the sensor window when `info` marks it as open.
 pub fn show(
-    ui: &mut egui::Ui, open: &mut bool, sensor_info: &[ElementDisplayInfo], search_bar: &mut SearchBar,
-    pages: &mut [(usize, usize)], sensor_precision_digits: &mut usize,
-    shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
+    ui: &mut egui::Ui, info: &mut SensorDisplayInfo, shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
 )
 {
+    let SensorDisplayInfo { open, elements, search_bar, precision_digits } = info;
+
     // Clear the text inside the window's search bar when the window is closed.
     if !*open {
         search_bar.clear();
@@ -291,12 +334,13 @@ pub fn show(
         /* Decimal places selector */
         ui.horizontal(|ui| {
             ui.label(RichText::new("Number of decimal places").font(SECONDARY_FONT));
-            ui.add(egui::DragValue::new(sensor_precision_digits).range(SENSOR_PRECISION_RANGE));
+            ui.add(egui::DragValue::new(precision_digits).range(SENSOR_PRECISION_RANGE));
         });
 
         /* Sensor widgets */
         let sensordata = lock.data_passive.sensordata();
-        for (sensor_id, (info, (page, widgets_per_page))) in sensor_info.iter().zip(pages.iter_mut()).enumerate() {
+        for (sensor_id, SensorElementInfo { display, page, widgets_per_page }) in elements.iter_mut().enumerate() {
+            let info = &*display;
             if let Some(query) = search_bar.text() && !info.name().starts_with(query) {
                 continue;
             }
@@ -351,7 +395,7 @@ pub fn show(
                                             for (row_i, component) in components.iter().enumerate() {
                                                 let values;
                                                 (values, rest) = rest.split_at(component.sub_component_names.len());
-                                                show_sensor_row(ui, component, values, row_i == components.len() - 1, *sensor_precision_digits);
+                                                show_sensor_row(ui, component, values, row_i == components.len() - 1, *precision_digits);
                                             }
                                         });
                                     })
@@ -375,7 +419,7 @@ pub fn show(
                                     let values;
                                     (values, rest) = rest.split_at(component.sub_component_names.len());
                                     widget_page.paged(ui, |ui| {
-                                        show_sensor_row(ui, component, values, row_i == components.len() - 1, *sensor_precision_digits);
+                                        show_sensor_row(ui, component, values, row_i == components.len() - 1, *precision_digits);
                                     });
                                 }
                             });

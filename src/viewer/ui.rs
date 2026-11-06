@@ -14,14 +14,12 @@ use egui_glow::glow::{self, HasContext};
 use egui_winit::winit::window::Window;
 use egui_winit::egui;
 
-use crate::viewer::ui::widget_extras::DEFAULT_WIDGETS_PER_ELEMENT;
 use crate::wrappers::mj_visualization::{MjvOption, MjvCamera, MjvScene};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
 use crate::wrappers::mj_model::{MjModel, MjtObjBase};
-use crate::wrappers::mj_data::MjtState;
 
-use windows::sensor::{DEFAULT_NUM_DIGITS_SENSOR_PRECISION};
-use windows::state::DEFAULT_NUM_DIGITS_STATE_PRECISION;
+use windows::sensor::SensorDisplayInfo;
+use windows::state::StateDisplayInfo;
 use windows::ElementDisplayInfo;
 use widget_extras::SearchBar;
 
@@ -68,8 +66,6 @@ pub(crate) struct ViewerUI {
     joint_window: bool,
     equality_window: bool,
     group_window: bool,
-    sensor_window: bool,
-    state_window: bool,
     screenshot_viewport_only: bool,
     screenshot_depth: bool,
 
@@ -80,37 +76,17 @@ pub(crate) struct ViewerUI {
     /* Window's search-bar states */
     actuator_search_bar: SearchBar,
     joint_search_bar: SearchBar,
-    sensor_search_bar: SearchBar,
     equality_search_bar: SearchBar,
-
-    /* Window page states */
-    /// Page and widgets per page of each sensor, in ID order.
-    sensor_pages: Vec<(usize, usize)>,
-    /// Page and widgets per page of state, in ID order.
-    state_pages: [(usize, usize); MjtState::mjNSTATE as usize],
 
     /* Model-related */
     camera_names: Vec<String>,
     actuator_info: Vec<ElementDisplayInfo>,
     joint_info: Vec<ElementDisplayInfo>,
-    sensor_info: Vec<ElementDisplayInfo>,
     equality_names: Vec<String>,
 
-    /* MjData-state-related */
-    /// Size of each state element, in [`MjtState`] bit order.
-    state_sizes: Vec<usize>,
-    /// Per-state-type flags that show the values of that type in the state window.
-    state_window_enables: [bool; MjtState::mjNSTATE as usize],
-    /// The number of decimal places to display state values with.
-    /// The rounding follows semantics of [`format`], with which the values
-    /// are turned into a [`String`].
-    state_precision_digits: usize,
-
-    /* Sensor-related */
-    /// The number of decimal places to display sensor values with.
-    /// The rounding follows semantics of [`format`], with which the values
-    /// are turned into a [`String`].
-    sensor_precision_digits: usize,
+    /* Data-related */
+    sensor_info: SensorDisplayInfo,
+    state_info: StateDisplayInfo,
 
     /* User-related */
     user_ui_callbacks: Vec<UiCallback>,
@@ -143,29 +119,21 @@ impl ViewerUI {
             camera_names: Vec::new(),
             actuator_info: Vec::new(),
             joint_info: Vec::new(),
-            sensor_info: Vec::new(),
+            sensor_info: SensorDisplayInfo::new(),
+            state_info: StateDisplayInfo::new(),
             equality_names: Vec::new(),
-            state_sizes: Vec::new(),
             user_ui_callbacks: Vec::new(),
             actuator_window: false,
             joint_window: false,
             equality_window: false,
             group_window: false,
-            sensor_window: false,
-            state_window: false,
             screenshot_viewport_only: false,
             screenshot_depth: false,
             show_tracking_modal: false,
             tracking_selected_body: None,
             actuator_search_bar: SearchBar::new("Enter actuator's name"),
             joint_search_bar: SearchBar::new("Enter joint's name"),
-            sensor_search_bar: SearchBar::new("Enter sensor's name"),
             equality_search_bar: SearchBar::new("Enter equality's name"),
-            sensor_pages: Vec::new(),
-            state_pages: [(0, DEFAULT_WIDGETS_PER_ELEMENT); MjtState::mjNSTATE as usize],
-            state_window_enables: [false; MjtState::mjNSTATE as usize],
-            state_precision_digits: DEFAULT_NUM_DIGITS_STATE_PRECISION,
-            sensor_precision_digits: DEFAULT_NUM_DIGITS_SENSOR_PRECISION,
         };
         viewer_ui.reset_to_model(model);
         Ok(viewer_ui)
@@ -183,12 +151,9 @@ impl ViewerUI {
 
         self.actuator_info = windows::actuator::display_infos(model).collect();
         self.joint_info = windows::joint::display_infos(model).collect();
-        self.sensor_info = windows::sensor::display_infos(model).collect();
         self.equality_names = windows::equality::names(model).collect();
-        self.state_sizes = windows::state::sizes(model).collect();
-
-        self.sensor_pages = vec![(0, DEFAULT_WIDGETS_PER_ELEMENT); self.sensor_info.len()];
-        self.state_pages = [(0, DEFAULT_WIDGETS_PER_ELEMENT); MjtState::mjNSTATE as usize];
+        self.sensor_info.reset_to_model(model);
+        self.state_info.reset_to_model(model);
 
         /* Camera tracking state */
         // The pending selection is a body ID of the previous model, which addresses a different
@@ -263,7 +228,7 @@ impl ViewerUI {
                     panel::ui::show(
                         ui, status, window, &mut self.events, &mut self.actuator_window,
                         &mut self.joint_window, &mut self.equality_window, &mut self.group_window,
-                        &mut self.sensor_window, &mut self.state_window,
+                        &mut self.sensor_info, &mut self.state_info,
                     );
 
                     /* Simulation */
@@ -311,10 +276,7 @@ impl ViewerUI {
             );
 
             // Sensors window
-            windows::sensor::show(
-                ui, &mut self.sensor_window, &self.sensor_info, &mut self.sensor_search_bar,
-                &mut self.sensor_pages, &mut self.sensor_precision_digits, shared_viewer_state
-            );
+            windows::sensor::show(ui, &mut self.sensor_info, shared_viewer_state);
 
             // Equalities window
             windows::equality::show(
@@ -325,11 +287,8 @@ impl ViewerUI {
             // Groups window
             windows::group::show(ui, &mut self.group_window, options);
 
-            windows::state::show(
-                ui, &mut self.state_window, &mut self.state_window_enables, &self.state_sizes,
-                &mut self.state_precision_digits, &mut self.state_pages,
-                shared_viewer_state
-            );
+            // States window
+            windows::state::show(ui, &mut self.state_info, shared_viewer_state);
 
             /* Modals */
             // Camera tracking modal

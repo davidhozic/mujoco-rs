@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use egui_winit::egui;
 use egui::RichText;
 
-use crate::viewer::ui::widget_extras::WidgetPage;
+use crate::viewer::ui::widget_extras::{DEFAULT_WIDGETS_PER_ELEMENT, WidgetPage};
 use crate::wrappers::mj_data::MjtState;
 use crate::wrappers::mj_model::MjModel;
 use crate::viewer::ui::SECONDARY_FONT;
@@ -13,7 +13,7 @@ use crate::viewer::ViewerSharedState;
 use crate::util::LockUnpoison;
 
 /// The default number of digits of precision that state values will be displayed with.
-pub const DEFAULT_NUM_DIGITS_STATE_PRECISION: usize = 3;
+const DEFAULT_NUM_DIGITS_STATE_PRECISION: usize = 3;
 
 /// Names of the states inside [`MjtState`], aligned with the masks inside `MjtState`.
 const STATE_NAMES: [&str; MjtState::mjNSTATE as usize] = [
@@ -39,22 +39,65 @@ const NUM_STATE_WINDOW_COLUMNS: usize = 3;
 /// The range of digits of precision that state values can be displayed with.
 const STATE_PRECISION_RANGE: RangeInclusive<usize> = 0..=15;  // About matches f64's precision.
 
-/// Returns the size of each state element of `model`, in [`MjtState`] bit order.
-pub fn sizes(model: &MjModel) -> impl Iterator<Item = usize> {
-    (0..MjtState::mjNSTATE as u32).map(|bit| model.state_size(1 << bit))
+/// Cached display information and user settings of the state window.
+pub struct StateDisplayInfo {
+    /// Whether the window is open.
+    pub open: bool,
+    /// Information of each state element, in [`MjtState`] bit order.
+    elements: [StateElementInfo; MjtState::mjNSTATE as usize],
+    /// The number of decimal places to display state values with.
+    /// The rounding follows semantics of [`format`], with which the values
+    /// are turned into a [`String`].
+    precision_digits: usize,
 }
 
-/// Shows the state window when `open` is set.
+impl StateDisplayInfo {
+    /// Creates the information of a closed window with no model data.
+    pub fn new() -> Self {
+        Self {
+            open: false,
+            elements: std::array::from_fn(|_| StateElementInfo {
+                size: 0,
+                enabled: false,
+                page: 0,
+                widgets_per_page: DEFAULT_WIDGETS_PER_ELEMENT,
+            }),
+            precision_digits: DEFAULT_NUM_DIGITS_STATE_PRECISION,
+        }
+    }
+
+    /// Rebuilds the model-dependent information from `model`.
+    pub fn reset_to_model(&mut self, model: &MjModel) {
+        self.elements.iter_mut().enumerate().for_each(|(bit, element)| {
+            element.size = model.state_size(1 << bit);
+            element.page = 0;
+            element.widgets_per_page = DEFAULT_WIDGETS_PER_ELEMENT;
+        });
+    }
+}
+
+/// Display information and user settings of one state element.
+struct StateElementInfo {
+    /// Number of values in the element.
+    size: usize,
+    /// Whether the state window shows the values of the element.
+    enabled: bool,
+    /// Current page of the values.
+    page: usize,
+    /// Number of values per page.
+    widgets_per_page: usize,
+}
+
+/// Shows the state window when `info` marks it as open.
 ///
 /// # Panics
-/// Panics when `state_sizes` does not include correct sizes for `state_window_enables`.
+/// Panics when the cached sizes do not match the model of `shared_viewer_state`.
 pub fn show(
-    ui: &mut egui::Ui, open: &mut bool,
-    state_window_enables: &mut [bool; MjtState::mjNSTATE as usize], state_sizes: &[usize],
-    state_precision_digits: &mut usize, state_pages: &mut [(usize, usize); MjtState::mjNSTATE as usize],
-    shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
+    ui: &mut egui::Ui, info: &mut StateDisplayInfo, shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
 )
 {
+    let StateDisplayInfo { open, elements, precision_digits } = info;
+
     egui::Window::new("State")
         .id(egui::Id::new("mujoco_rs_state_window"))
         .open(open)
@@ -67,10 +110,10 @@ pub fn show(
             .num_columns(NUM_STATE_WINDOW_COLUMNS)
             .show(ui, |ui|
         {
-            for (i, (state_name, enabled)) in STATE_NAMES.into_iter()
-                .zip(state_window_enables.iter_mut()).enumerate()
+            for (i, (state_name, element)) in STATE_NAMES.into_iter()
+                .zip(elements.iter_mut()).enumerate()
             {
-                ui.checkbox(enabled, RichText::new(state_name).font(SECONDARY_FONT));
+                ui.checkbox(&mut element.enabled, RichText::new(state_name).font(SECONDARY_FONT));
                 if (i + 1).is_multiple_of(NUM_STATE_WINDOW_COLUMNS) {
                     ui.end_row();
                 }
@@ -82,12 +125,12 @@ pub fn show(
         /* Precision selector */
         ui.horizontal(|ui| {
             ui.label(RichText::new("Number of decimal places").font(SECONDARY_FONT));
-            ui.add(egui::DragValue::new(state_precision_digits).range(STATE_PRECISION_RANGE));
+            ui.add(egui::DragValue::new(precision_digits).range(STATE_PRECISION_RANGE));
         });
 
         /* States display */
-        let bitmask = state_window_enables.iter().enumerate()
-            .filter(|(_, enabled)| **enabled)
+        let bitmask = elements.iter().enumerate()
+            .filter(|(_, element)| element.enabled)
             .fold(0, |mask, (i, _)| mask | (1 << i));
 
         let state_box = {
@@ -103,14 +146,12 @@ pub fn show(
             .show(ui, |ui|
         {
             let mut local_state;
-            for (((size, name), (page, per_page)), _) in state_sizes.iter()
+            for (element, name) in elements.iter_mut()
                 .zip(STATE_NAMES)
-                .zip(state_pages.iter_mut())
-                .zip(state_window_enables.iter())
-                .filter(|(_, enabled)| **enabled)
+                .filter(|(element, _)| element.enabled)
             {
-                let mut pager = WidgetPage::new(page, per_page);
-                (local_state, state) = state.split_at(*size);
+                let mut pager = WidgetPage::new(&mut element.page, &mut element.widgets_per_page);
+                (local_state, state) = state.split_at(element.size);
 
                 ui.label(RichText::new(name).font(SECONDARY_FONT));
 
@@ -122,7 +163,7 @@ pub fn show(
                     pager.paged(ui, |ui| {
                         egui::Frame::canvas(ui.style()).show(ui, |ui| {
                             ui.label(
-                                RichText::new(format!("{ls:.state_precision_digits$?}"))
+                                RichText::new(format!("{ls:.precision_digits$?}"))
                                     .font(SECONDARY_FONT)
                             );
                         });
