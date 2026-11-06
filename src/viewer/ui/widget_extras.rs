@@ -7,6 +7,10 @@ use egui_winit::egui;
 
 use crate::viewer::ui::MAX_SPAN_WIDTH;
 
+/// Default number of widgets to display within a single page of [`WidgetPage`].
+/// The latter is then free to change the default value.
+pub const DEFAULT_WIDGETS_PER_ELEMENT: usize = 20;
+
 /// Adds a grid row with a label and a numeric input bounded to `range`.
 pub(super) fn name_scalar_row<Num: egui::emath::Numeric>(
     ui: &mut egui::Ui,
@@ -169,6 +173,7 @@ impl egui::Widget for WidgetPage<'_> {
                 *self.page /= 2;
                 *self.widgets_per_page *= 2;
             }
+            ui.label(format!("(Page {}/{})", self.page, self.widgets_added / *self.widgets_per_page));
         }).response
     }
 }

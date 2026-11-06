@@ -14,12 +14,13 @@ use egui_glow::glow::{self, HasContext};
 use egui_winit::winit::window::Window;
 use egui_winit::egui;
 
+use crate::viewer::ui::widget_extras::DEFAULT_WIDGETS_PER_ELEMENT;
 use crate::wrappers::mj_visualization::{MjvOption, MjvCamera, MjvScene};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
 use crate::wrappers::mj_model::{MjModel, MjtObjBase};
 use crate::wrappers::mj_data::MjtState;
 
-use windows::sensor::{DEFAULT_NUM_DIGITS_SENSOR_PRECISION, MAX_WIDGETS_PER_ELEMENT};
+use windows::sensor::{DEFAULT_NUM_DIGITS_SENSOR_PRECISION};
 use windows::state::DEFAULT_NUM_DIGITS_STATE_PRECISION;
 use windows::ElementDisplayInfo;
 use widget_extras::SearchBar;
@@ -85,6 +86,8 @@ pub(crate) struct ViewerUI {
     /* Window page states */
     /// Page and widgets per page of each sensor, in ID order.
     sensor_pages: Vec<(usize, usize)>,
+    /// Page and widgets per page of state, in ID order.
+    state_pages: [(usize, usize); MjtState::mjNSTATE as usize],
 
     /* Model-related */
     camera_names: Vec<String>,
@@ -159,6 +162,7 @@ impl ViewerUI {
             sensor_search_bar: SearchBar::new("Enter sensor's name"),
             equality_search_bar: SearchBar::new("Enter equality's name"),
             sensor_pages: Vec::new(),
+            state_pages: [(0, DEFAULT_WIDGETS_PER_ELEMENT); MjtState::mjNSTATE as usize],
             state_window_enables: [false; MjtState::mjNSTATE as usize],
             state_precision_digits: DEFAULT_NUM_DIGITS_STATE_PRECISION,
             sensor_precision_digits: DEFAULT_NUM_DIGITS_SENSOR_PRECISION,
@@ -183,7 +187,8 @@ impl ViewerUI {
         self.equality_names = windows::equality::names(model).collect();
         self.state_sizes = windows::state::sizes(model).collect();
 
-        self.sensor_pages = vec![(0, MAX_WIDGETS_PER_ELEMENT); self.sensor_info.len()];
+        self.sensor_pages = vec![(0, DEFAULT_WIDGETS_PER_ELEMENT); self.sensor_info.len()];
+        self.state_pages = [(0, DEFAULT_WIDGETS_PER_ELEMENT); MjtState::mjNSTATE as usize];
 
         /* Camera tracking state */
         // The pending selection is a body ID of the previous model, which addresses a different
@@ -322,7 +327,8 @@ impl ViewerUI {
 
             windows::state::show(
                 ui, &mut self.state_window, &mut self.state_window_enables, &self.state_sizes,
-                &mut self.state_precision_digits, shared_viewer_state
+                &mut self.state_precision_digits, &mut self.state_pages,
+                shared_viewer_state
             );
 
             /* Modals */

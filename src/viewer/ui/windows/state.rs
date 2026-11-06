@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use egui_winit::egui;
 use egui::RichText;
 
+use crate::viewer::ui::widget_extras::WidgetPage;
 use crate::wrappers::mj_data::MjtState;
 use crate::wrappers::mj_model::MjModel;
 use crate::viewer::ui::SECONDARY_FONT;
@@ -50,7 +51,8 @@ pub fn sizes(model: &MjModel) -> impl Iterator<Item = usize> {
 pub fn show(
     ui: &mut egui::Ui, open: &mut bool,
     state_window_enables: &mut [bool; MjtState::mjNSTATE as usize], state_sizes: &[usize],
-    state_precision_digits: &mut usize, shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
+    state_precision_digits: &mut usize, state_pages: &mut [(usize, usize); MjtState::mjNSTATE as usize],
+    shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
 )
 {
     egui::Window::new("State")
@@ -95,19 +97,44 @@ pub fn show(
             }
             lock.data_passive.state(bitmask)
         };
+
         let mut state = &state_box[..];
         egui::Grid::new("mujoco_rs_state_grid")
             .show(ui, |ui|
         {
             let mut local_state;
-            for ((size, name), _) in state_sizes.iter()
+            for (((size, name), (page, per_page)), _) in state_sizes.iter()
                 .zip(STATE_NAMES)
+                .zip(state_pages.iter_mut())
                 .zip(state_window_enables.iter())
                 .filter(|(_, enabled)| **enabled)
             {
+                let mut pager = WidgetPage::new(page, per_page);
                 (local_state, state) = state.split_at(*size);
+
                 ui.label(RichText::new(name).font(SECONDARY_FONT));
-                ui.label(RichText::new(format!("{local_state:.state_precision_digits$?}")).font(SECONDARY_FONT));
+
+                // Efficiently page by pre-calculating offsets.
+                let start = pager.page_local_offset();
+                pager.paged_empty(start);
+                let limit = pager.available_in_current_page();
+                for ls in local_state.iter().skip(start).take(limit) {
+                    pager.paged(ui, |ui| {
+                        egui::Frame::canvas(ui.style()).show(ui, |ui| {
+                            ui.label(
+                                RichText::new(format!("{ls:.state_precision_digits$?}"))
+                                    .font(SECONDARY_FONT)
+                            );
+                        });
+                    });
+                }
+
+                // Fill the rest of the widgets we were supposed to add above. Substracted from start
+                // as we already filled that space and from limit since we added that much above.
+                // See the command at page_empty use for the sensor window inside sensor.rs
+                // for more detailed explanation.
+                pager.paged_empty(local_state.len().saturating_sub(start + limit));
+                ui.add(pager);
                 ui.end_row();
             }
         });

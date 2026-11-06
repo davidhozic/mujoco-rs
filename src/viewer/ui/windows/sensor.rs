@@ -29,9 +29,6 @@ pub const DEFAULT_NUM_DIGITS_SENSOR_PRECISION: usize = 3;
 /// The range of digits of precision that sensor values can be displayed with.
 const SENSOR_PRECISION_RANGE: RangeInclusive<usize> = 0..=15;  // About matches f64's precision.
 
-/// Initial number of widgets that an element shows on one page.
-pub const MAX_WIDGETS_PER_ELEMENT: usize = 20;
-
 /// Ensures, at compile-time, that information inside sensor types with multiple data fields and variants is not stale.
 macro_rules! check_sensor_components {
     ($components:expr, $len:expr) => {
@@ -364,6 +361,8 @@ pub fn show(
                             // Add fake widgets (increase internal count) such that we simulate above loop iterating
                             // and repopulating all the pages. This final step is needed to trick the UI into thinking
                             // we did actually add more widgets. If we don't do this, there will be no buttons displayed.
+                            // Substracted from start
+                            // as we already filled that space and from limit since we added that much above.
                             widget_page.paged_empty(n_replicate.saturating_sub(available_start + available));
                         } else {
                             egui::Grid::new("sensor_data_ui_grid")
