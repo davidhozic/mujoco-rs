@@ -444,6 +444,7 @@ fn show_sensor_row(
     for (sub_name, value) in component.sub_component_names.iter().zip(values) {
         ui.label(RichText::new(*sub_name).font(SECONDARY_FONT));
 
+        let text = format!("{value:.sensor_precision_digits$}{}", component.unit);
         match &component.range {
             Some(range) => {
                 ui.add(
@@ -452,18 +453,18 @@ fn show_sensor_row(
                             (range.end() - range.start())) as f32
                     )
                     .text(
-                        RichText::new(format!("{value:.sensor_precision_digits$}{}", component.unit))
+                        RichText::new(&text)
                         .font(SECONDARY_FONT)
                         .color(egui::Color32::GRAY)
                     )
                     .desired_width(SENSOR_BAR_WIDTH)
                     .corner_radius(SENSOR_BAR_CORNER_RADIUS)
-                );
+                ).on_hover_text(text);
             }
 
             None => {
                 egui::Frame::canvas(ui.style()).show(ui, |ui| {
-                    ui.label(format!("{value:.sensor_precision_digits$}{}", component.unit));
+                    ui.label(text);
                 });
             }
         }

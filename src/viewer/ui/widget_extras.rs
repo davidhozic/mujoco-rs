@@ -173,7 +173,8 @@ impl egui::Widget for WidgetPage<'_> {
                 *self.page /= 2;
                 *self.widgets_per_page *= 2;
             }
-            ui.label(format!("(Page {}/{})", self.page, self.widgets_added / *self.widgets_per_page));
+            let page_count = self.widgets_added.div_ceil(*self.widgets_per_page);
+            ui.label(format!("(Page {}/{page_count})", *self.page + 1));
         }).response
     }
 }
