@@ -23,11 +23,11 @@ const SENSOR_BAR_WIDTH: f32 = 75.0;
 /// Corner radius of the bar of a sensor value with a natural range, in points.
 const SENSOR_BAR_CORNER_RADIUS: u8 = 3;
 
-/// The default number of digits of precisions that sensor values will be displayed with.
-pub(crate) const DEFAULT_NUM_DIGITS_SENSOR_PRECISION: usize = 3;
+/// The default number of digits of precision that sensor values will be displayed with.
+pub const DEFAULT_NUM_DIGITS_SENSOR_PRECISION: usize = 3;
 
-/// The range of digits of precisions that sensor values can be displayed with.
-const SENSOR_PRECISION_RANGE: RangeInclusive<usize> = 0..=15;  // about matches f64's precision
+/// The range of digits of precision that sensor values can be displayed with.
+const SENSOR_PRECISION_RANGE: RangeInclusive<usize> = 0..=15;  // About matches f64's precision.
 
 /// Initial number of widgets that an element shows on one page.
 pub const MAX_WIDGETS_PER_ELEMENT: usize = 20;
@@ -291,7 +291,7 @@ pub fn show(
 
         ui.separator();
 
-        // Selector for number of digits in decimals.
+        /* Decimal places selector */
         ui.horizontal(|ui| {
             ui.label(RichText::new("Number of decimal places").font(SECONDARY_FONT));
             ui.add(egui::DragValue::new(sensor_precision_digits).range(SENSOR_PRECISION_RANGE));

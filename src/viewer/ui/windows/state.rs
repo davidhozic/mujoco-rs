@@ -11,6 +11,9 @@ use crate::viewer::ui::SECONDARY_FONT;
 use crate::viewer::ViewerSharedState;
 use crate::util::LockUnpoison;
 
+/// The default number of digits of precision that state values will be displayed with.
+pub const DEFAULT_NUM_DIGITS_STATE_PRECISION: usize = 3;
+
 /// Names of the states inside [`MjtState`], aligned with the masks inside `MjtState`.
 const STATE_NAMES: [&str; MjtState::mjNSTATE as usize] = [
     "Time",
@@ -32,11 +35,8 @@ const STATE_NAMES: [&str; MjtState::mjNSTATE as usize] = [
 /// Number of columns that the state window has for its checkboxes section.
 const NUM_STATE_WINDOW_COLUMNS: usize = 3;
 
-/// The default number of digits of precisions that state values will be displayed with.
-pub(crate) const DEFAULT_NUM_DIGITS_STATE_PRECISION: usize = 3;
-
-/// The range of digits of precisions that state values can be displayed with.
-const STATE_PRECISION_RANGE: RangeInclusive<usize> = 0..=15;  // about matches f64's precision
+/// The range of digits of precision that state values can be displayed with.
+const STATE_PRECISION_RANGE: RangeInclusive<usize> = 0..=15;  // About matches f64's precision.
 
 /// Returns the size of each state element of `model`, in [`MjtState`] bit order.
 pub fn sizes(model: &MjModel) -> impl Iterator<Item = usize> {
@@ -46,7 +46,7 @@ pub fn sizes(model: &MjModel) -> impl Iterator<Item = usize> {
 /// Shows the state window when `open` is set.
 ///
 /// # Panics
-/// Panics when `state_sizes` does not included correct sizes for `state_window_enables`.
+/// Panics when `state_sizes` does not include correct sizes for `state_window_enables`.
 pub fn show(
     ui: &mut egui::Ui, open: &mut bool,
     state_window_enables: &mut [bool; MjtState::mjNSTATE as usize], state_sizes: &[usize],
@@ -77,7 +77,7 @@ pub fn show(
 
         ui.separator();
 
-        // Selector for number of digits in decimals.
+        /* Precision selector */
         ui.horizontal(|ui| {
             ui.label(RichText::new("Number of decimal places").font(SECONDARY_FONT));
             ui.add(egui::DragValue::new(state_precision_digits).range(STATE_PRECISION_RANGE));

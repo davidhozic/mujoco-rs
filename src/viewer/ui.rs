@@ -14,14 +14,13 @@ use egui_glow::glow::{self, HasContext};
 use egui_winit::winit::window::Window;
 use egui_winit::egui;
 
-use crate::viewer::ui::windows::sensor::DEFAULT_NUM_DIGITS_SENSOR_PRECISION;
-use crate::viewer::ui::windows::state::DEFAULT_NUM_DIGITS_STATE_PRECISION;
 use crate::wrappers::mj_visualization::{MjvOption, MjvCamera, MjvScene};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
 use crate::wrappers::mj_model::{MjModel, MjtObjBase};
 use crate::wrappers::mj_data::MjtState;
 
-use windows::sensor::MAX_WIDGETS_PER_ELEMENT;
+use windows::sensor::{DEFAULT_NUM_DIGITS_SENSOR_PRECISION, MAX_WIDGETS_PER_ELEMENT};
+use windows::state::DEFAULT_NUM_DIGITS_STATE_PRECISION;
 use windows::ElementDisplayInfo;
 use widget_extras::SearchBar;
 
@@ -99,14 +98,14 @@ pub(crate) struct ViewerUI {
     state_sizes: Vec<usize>,
     /// Per-state-type flags that show the values of that type in the state window.
     state_window_enables: [bool; MjtState::mjNSTATE as usize],
-    /// The number of decimal precision of precision to display numbers to.
-    /// The truncation follows semantics of [`format`], with which the values
+    /// The number of decimal places to display state values with.
+    /// The rounding follows semantics of [`format`], with which the values
     /// are turned into a [`String`].
     state_precision_digits: usize,
 
     /* Sensor-related */
     /// The number of decimal places to display sensor values with.
-    /// The truncation follows semantics of [`format`], with which the values
+    /// The rounding follows semantics of [`format`], with which the values
     /// are turned into a [`String`].
     sensor_precision_digits: usize,
 
