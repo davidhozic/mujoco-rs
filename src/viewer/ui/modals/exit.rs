@@ -36,7 +36,7 @@ pub fn show(
                 // Confirm exit
                 if ui.add(
                     egui::Button::new(RichText::new("Ok").font(MAIN_FONT).color(Color32::BLACK))
-                    .fill(Color32::LIGHT_BLUE)
+                    .fill(Color32::from_rgb(51, 153, 204))
                     .min_size(BUTTON_SIZE)
                 ).clicked() {
                     viewer_running.store(false, Ordering::Relaxed);  // will exit when possible.
