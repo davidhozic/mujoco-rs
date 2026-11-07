@@ -117,7 +117,7 @@ dependency is needed.
 
 End-to-end example
 ------------------
-The following is a complete example that loads a model, runs one step, renders it,
+The following is a complete example that loads a model, runs 150 steps, renders the result,
 and saves both an RGB and a depth image:
 
 .. code-block:: rust
