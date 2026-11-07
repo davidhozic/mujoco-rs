@@ -36,6 +36,19 @@
 - The actuator, joint, sensor and equality windows now have a search bar. The window shows only
   the elements whose name starts with the search text.
 - Added a state window that shows the values of the state inside |mj_data|.
+- When a close of the viewer's OS window is requested, an exit-confirmation modal (dialog), will be
+  opened. Another exit request, while the modal is already open, will close the viewer immediately
+  (well, the running flag will be falsified; the actual close happens after the ``MjViewer``
+  struct instance has been dropped). 
+
+*Viewer*
+
+- Added methods to |mj_viewer|:
+
+  - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>request_close` :sup:`new` closes the
+    viewer after the exit confirmation.
+  - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>force_close` :sup:`new` closes the
+    viewer without the exit confirmation.
 
 .. rubric:: New examples
 

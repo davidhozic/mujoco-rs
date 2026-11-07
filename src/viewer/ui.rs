@@ -5,6 +5,7 @@ mod panel;
 mod modals;
 
 use std::collections::VecDeque;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::fmt::Debug;
 
@@ -73,6 +74,9 @@ pub(crate) struct ViewerUI {
     show_tracking_modal: bool,
     tracking_selected_body: Option<usize>,
 
+    // Exiting modal confirmation
+    show_exit_modal: bool,
+
     /* Window's search-bar states */
     actuator_search_bar: SearchBar,
     joint_search_bar: SearchBar,
@@ -131,6 +135,7 @@ impl ViewerUI {
             screenshot_depth: false,
             show_tracking_modal: false,
             tracking_selected_body: None,
+            show_exit_modal: false,
             actuator_search_bar: SearchBar::new("Enter actuator's name"),
             joint_search_bar: SearchBar::new("Enter joint's name"),
             equality_search_bar: SearchBar::new("Enter equality's name"),
@@ -174,6 +179,11 @@ impl ViewerUI {
         once_fn(&mut self.egui_ctx)
     }
 
+    /// Opens the exit confirmation modal. Returns `true` if the modal was already open.
+    pub(crate) fn request_close(&mut self) -> bool {
+        std::mem::replace(&mut self.show_exit_modal, true)
+    }
+
     /// Draws the UI to the viewport. Returns the width in physical pixels that the left side
     /// panel reserves, or `0.0` when the panel is hidden.
     #[allow(clippy::too_many_arguments)]
@@ -183,6 +193,7 @@ impl ViewerUI {
         scene: &mut MjvScene, options: &mut MjvOption,
         camera: &mut MjvCamera,
         shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
+        viewer_running: &Arc<AtomicBool>
     ) -> f32 {
         // Viewport reservations, which will be excluded from MuJoCo's viewport.
         // This way MuJoCo won't draw over the UI.
@@ -296,6 +307,9 @@ impl ViewerUI {
                 ui, &mut self.show_tracking_modal, &mut self.tracking_selected_body,
                 shared_viewer_state,
             );
+
+            // Exit confirmation
+            modals::exit::show(ui, &mut self.show_exit_modal, viewer_running);
 
             /* User-defined UI callbacks */
             // Callbacks that receive the egui context and MjData passive instance

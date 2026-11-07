@@ -76,6 +76,7 @@ impl RenderBase {
         Ok(s)
     }
 
+    /// Forwards request forward to the event queue, provided forwarding is enabled.
     fn maybe_forward_event(&mut self, event: WindowEvent) {
         if self.events {
             self.queue.push_back(event);
@@ -166,15 +167,11 @@ impl ApplicationHandler for RenderBase {
 
     fn window_event(
         &mut self,
-        event_loop: &ActiveEventLoop,
+        _event_loop: &ActiveEventLoop,
         _id: WindowId,
         event: WindowEvent,
     ) {
         match event {
-            WindowEvent::CloseRequested => {
-                event_loop.exit();
-                self.maybe_forward_event(WindowEvent::CloseRequested);
-            }
             WindowEvent::Resized(_) => {
                 if let Some(RenderBaseGlState { window, gl_context, gl_surface }) = &self.state {
                     window.resize_surface(gl_surface, gl_context);
