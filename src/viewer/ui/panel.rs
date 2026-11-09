@@ -2,6 +2,7 @@
 pub(super) mod visualization;
 pub(super) mod simulation;
 pub(super) mod rendering;
+pub(super) mod recorder;
 pub(super) mod physics;
 pub(super) mod ui;
 

@@ -1,6 +1,7 @@
 //! A submodule of the viewer's UI to separate window definitions from all the rest of UI.
 pub(super) mod actuator;
 pub(super) mod equality;
+pub(super) mod recorder;
 pub(super) mod sensor;
 pub(super) mod state;
 pub(super) mod group;

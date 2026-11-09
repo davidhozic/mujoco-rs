@@ -19,6 +19,7 @@ use crate::wrappers::mj_visualization::{MjvOption, MjvCamera, MjvScene};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
 use crate::wrappers::mj_model::{MjModel, MjtObjBase};
 
+use windows::recorder::state::StateRecorderData;
 use windows::sensor::SensorDisplayInfo;
 use windows::state::StateDisplayInfo;
 use windows::ElementDisplayInfo;
@@ -92,6 +93,9 @@ pub(crate) struct ViewerUI {
     sensor_info: SensorDisplayInfo,
     state_info: StateDisplayInfo,
 
+    /* Recorder-related */
+    state_recorder_data: StateRecorderData,
+
     /* User-related */
     user_ui_callbacks: Vec<UiCallback>,
 
@@ -125,6 +129,7 @@ impl ViewerUI {
             joint_info: Vec::new(),
             sensor_info: SensorDisplayInfo::new(),
             state_info: StateDisplayInfo::new(),
+            state_recorder_data: StateRecorderData::default(),
             equality_names: Vec::new(),
             user_ui_callbacks: Vec::new(),
             actuator_window: false,
@@ -258,6 +263,9 @@ impl ViewerUI {
                     /* Visualization */
                     panel::visualization::show(ui, &mut self.events, shared_viewer_state);
 
+                    /* Recorder */
+                    panel::recorder::show(ui, &mut self.state_recorder_data);
+
                     // Make the scroll bars span to the edges of the sidebar.
                     ui.take_available_space();
                 });
@@ -300,6 +308,9 @@ impl ViewerUI {
 
             // States window
             windows::state::show(ui, &mut self.state_info, shared_viewer_state);
+
+            // State recorder window
+            windows::recorder::state::show(ui, &mut self.state_recorder_data);
 
             /* Modals */
             // Camera tracking modal
