@@ -11,6 +11,7 @@ unnecessary_lazy_evaluations = "allow"
 
 [package]
 name = "mujoco-rs"
+links = "mujoco"
 version = "7.0.0+mj-3.17.0"
 edition = "2024"
 license-file.workspace = true
