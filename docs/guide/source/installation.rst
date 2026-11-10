@@ -63,15 +63,38 @@ Dependencies
 MuJoCo
 ---------------
 
-Dynamic linking (official MuJoCo build)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.. note::
+The only third-party dependency, not managed by Cargo, is the MuJoCo library itself (which this crate wraps).
+You have multiple ways of providing it:
 
-    **MuJoCo** official builds are available only in the form of a **shared/dynamic** library.
-    This is the preferred way of providing MuJoCo as it involves the least amount of work.
 
-When the goal is to provide MuJoCo as a dynamic dependency,
-you can either tell MuJoCo-rs to download MuJoCo automatically or you can download MuJoCo yourself.
+.. list-table::
+    :header-rows: 1
+
+    * - Configuration / Operating System
+      - Linux
+      - Windows
+      - macOS
+    * - :ref:`pkg_config`
+      - |checkmark|
+      -
+      - |checkmark|
+    * - :ref:`dynamic_linking`, automatic download
+      - |checkmark|
+      - |checkmark|
+      -
+    * - :ref:`dynamic_linking`, manual download
+      - |checkmark|
+      - |checkmark|
+      - |checkmark|
+    * - :ref:`static_linking`
+      - |checkmark|
+      - |checkmark|
+      - |checkmark|
+
+.. |checkmark| unicode:: U+2713
+
+MuJoCo-rs uses the first available configuration, in this order: ``MUJOCO_STATIC_LINK_DIR``,
+``MUJOCO_DYNAMIC_LINK_DIR``, pkg-config, automatic download.
 
 .. note::
 
@@ -80,6 +103,25 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
     fails unless ``MUJOCO_DYNAMIC_LINK_DIR`` or ``MUJOCO_STATIC_LINK_DIR`` points to a MuJoCo
     build for the target. Cross-compilation within the same OS (for example Linux x86_64 to
     Linux aarch64) is not affected.
+
+.. _pkg_config:
+
+pkg-config
+~~~~~~~~~~~~~
+On **Linux** and **macOS** platforms, pkg-config can be used to streamline the configuration.
+You need to set this up yourself. See `this pull request <https://github.com/davidhozic/mujoco-rs/pull/94>`_
+for more info. The MuJoCo version that pkg-config reports must be exactly |MUJOCO_VERSION_BOLD|.
+
+Depending on where the library is placed, you may still need to set up the dynamic loader
+environment variable, as described in :ref:`here <runtime_library_path>`.
+
+
+.. _dynamic_linking:
+
+Dynamic linking (official MuJoCo build)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+When the goal is to provide MuJoCo as a dynamic dependency,
+you can either tell MuJoCo-rs to download MuJoCo automatically or you can download MuJoCo yourself.
 
 .. tabs::
 
@@ -115,11 +157,6 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
 
     .. tab:: Manual download
 
-        .. note::
-
-            On Linux and macOS, if you somehow managed to register MuJoCo with pkg-config, nothing more is needed.
-            MuJoCo provides no official way to do this, but we still keep the option open.
-
         When providing MuJoCo manually, make sure its version is |MUJOCO_VERSION_BOLD|.
 
         Download MuJoCo from `here <mj_download_>`_.
@@ -132,37 +169,39 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
 
             .. tab:: Linux
 
-                    When using Linux (bash), the primary variable can be set like so (assuming MuJoCo's **.so** file is located
-                    inside ``/path/mujoco/lib/``):
-                    ::
+                When using Linux (bash), the primary variable can be set like so (assuming MuJoCo's
+                **.so** file is located inside ``/path/mujoco/lib/``):
 
-                        export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/
+                ::
+
+                    export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/
 
             .. tab:: Windows
 
-                    When using Windows (powershell), the primary variable can be set like so:
+                When using Windows (powershell), the primary variable can be set like so:
 
-                    ::
+                ::
 
-                        $env:MUJOCO_DYNAMIC_LINK_DIR="C:\path\mujoco\lib\"
+                    $env:MUJOCO_DYNAMIC_LINK_DIR="C:\path\mujoco\lib\"
 
             .. tab:: macOS
 
-                    One option is to set up your own Homebrew formula and install pkg-config
-                    (see `this pull request <https://github.com/davidhozic/mujoco-rs/pull/94>`_).
+                1. Open the `downloaded <mj_download_>`_ .dmg file.
+                2. Copy ``mujoco.framework`` to the current working directory.
+                3. Create a symbolic link to the copied ``libmujoco.x.x.x.dylib`` and name it ``libmujoco.dylib``:
 
-                    Another option is to copy and link some files:
+                   ::
 
-                    1. Open the `downloaded <mj_download_>`_ .dmg file.
-                    2. Copy ``mujoco.framework`` to the current working directory.
-                    3. Create a symbolic link to the copied ``libmujoco.x.x.x.dylib`` and name it ``libmujoco.dylib``:
+                       ln -s mujoco.framework/Versions/Current/libmujoco.x.x.x.dylib libmujoco.dylib
 
-                    - ``ln -s mujoco.framework/Versions/Current/libmujoco.x.x.x.dylib libmujoco.dylib``.
+                4. Set the primary environment variable:
 
-                    4. Set the primary environment variable:
+                   ::
 
-                    - ``export MUJOCO_DYNAMIC_LINK_DIR=$(realpath .)``
+                       export MUJOCO_DYNAMIC_LINK_DIR=$(realpath .)
 
+
+.. _runtime_library_path:
 
 You should now be able to compile and run your crate.
 
@@ -227,7 +266,7 @@ the ``cpp-viewer`` Cargo feature, which requires this static-linking setup.
 
 To build statically linkable libraries, perform the following steps:
 
-1. Clone MuJoCo-rs's repository,
+1. Clone MuJoCo-rs's repository and check out the tag that matches the MuJoCo-rs version you use,
 2. Change your directory to the cloned repository,
 3. Run commands:
    ::
@@ -254,9 +293,8 @@ To build statically linkable libraries, perform the following steps:
         so a library built with it needs the system linker; see the attention block below. Set the
         flag to ``OFF`` to keep the rust-lld linker usable.
 
-        The Dockerfile defines a container running Ubuntu 22.04 and installs clang-13 alongside
-        build-essential. See the commented-out cmake commands in the Dockerfile for the recommended
-        compiler flags.
+        The Dockerfile defines a container running Ubuntu 22.04. See the commented-out cmake
+        commands in the Dockerfile for the recommended compiler flags.
 
 4. Set the environment variable ``MUJOCO_STATIC_LINK_DIR`` to the **absolute** path of the ``lib/`` subdirectory
    inside ``mujoco/build/`` (on some distributions, e.g. Fedora/RHEL, the directory may be ``lib64/``).
