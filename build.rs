@@ -454,7 +454,7 @@ fn main() {
 
     // Metadata path for users to be able to detect which library path is used.
     println!(
-        "cargo::metadata=mujoco_lib_dir={}",
+        "cargo::metadata=lib_dir={}",
         library_dir_path.canonicalize().unwrap().display()  // unwrap only fails if path does not exist or is not a dir.
     );
 
