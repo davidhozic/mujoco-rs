@@ -389,7 +389,15 @@ fn main() {
         cfg_select! {
             unix => {
                 match pkg_config::Config::new().exactly_version(mujoco_version).probe("mujoco") {
-                    Ok(library) => library.link_paths.first().unwrap().clone(),
+                    Ok(library) => library.link_paths.into_iter().next()
+                        .or_else(||
+                            pkg_config::get_variable("mujoco", "libdir").ok()
+                                .filter(|libdir| !libdir.is_empty()).map(PathBuf::from)
+                        )
+                        .unwrap_or_else(|| panic!(
+                            "pkg-config located MuJoCo, but its 'mujoco.pc' gives neither a '-L' flag nor a \
+                            'libdir' variable --- set {MUJOCO_STATIC_LIB_PATH_VAR} or {MUJOCO_DYN_LIB_PATH_VAR} instead."
+                        )),
                     Err(_err) => {
                         cfg_select! {
                             target_os = "macos" => {
