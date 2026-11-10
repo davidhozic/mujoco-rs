@@ -14,6 +14,17 @@ bindings to a modified C++ one.
 
 [MuJoCo](https://mujoco.org/) is a general purpose physics simulator.
 
+<p align="center">
+<img src="docs/img_common/viewer_spot.gif" alt="The built-in Rust viewer with the Spot robot">
+</p>
+
+<p align="center">
+Demo of the built-in Rust viewer. Showing a scene from
+<a href="https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot">MuJoCo's menagerie</a>.
+Requires the <code>viewer</code> feature or the <code>viewer-ui</code> feature for UI support.
+</p>
+
+
 ## Documentation
 More detailed documentation is available at the:
 - [**API docs**](https://docs.rs/mujoco-rs/7.1.0/mujoco_rs/)
@@ -53,13 +64,6 @@ The main features on top of MuJoCo include:
 
   - Renderer: offscreen rendering to array or file.
   - Viewer: onscreen visualization of the 3D simulation.
-
-
-## Rust-native viewer
-Screenshot of the built-in Rust viewer. Showing a scene from [MuJoCo's menagerie](https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot).
-Requires the `viewer` feature or the `viewer-ui` feature for UI support.
-![](docs/img_common/viewer_spot.png)
-
 
 ## Optional Cargo features
 Optional Cargo features can be enabled:

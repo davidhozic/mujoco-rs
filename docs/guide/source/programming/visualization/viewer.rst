@@ -31,7 +31,7 @@ inspection of joint state, and much more.
 
 A screenshot of the Rust 3D viewer is shown below.
 
-.. figure:: ../../../../img_common/viewer_spot.png
+.. figure:: ../../../../img_common/viewer_spot.gif
 
     Rust-native interactive 3D viewer.
     Showing the `Spot <https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot>`_ scene from
