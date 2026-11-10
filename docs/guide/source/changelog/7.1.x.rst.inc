@@ -1,5 +1,5 @@
-[Unreleased] 7.1.0 (MuJoCo 3.17.0)
-==================================
+7.1.0 (MuJoCo 3.17.0)
+=====================
 
 .. rubric:: Error handling
 
@@ -39,7 +39,7 @@
 - When a close of the viewer's OS window is requested, an exit-confirmation modal (dialog), will be
   opened. Another exit request, while the modal is already open, will close the viewer immediately
   (well, the running flag will be falsified; the actual close happens after the ``MjViewer``
-  struct instance has been dropped). 
+  struct instance has been dropped).
 
 *Viewer*
 
@@ -49,6 +49,13 @@
     viewer after the exit confirmation.
   - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>force_close` :sup:`new` closes the
     viewer without the exit confirmation.
+
+*Build*
+
+- The build script now gives the absolute path of the MuJoCo library directory to the build
+  scripts of dependent crates, in the ``DEP_MUJOCO_LIB_DIR`` environment variable. For
+  this, the crate now declares ``links = "mujoco"``, thus Cargo permits only one crate with this
+  ``links`` value in a dependency graph.
 
 .. rubric:: New examples
 

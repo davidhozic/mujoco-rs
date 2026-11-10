@@ -1,12 +1,12 @@
 # MuJoCo-rs
-[![Guide](https://img.shields.io/badge/Guide-book-white)](https://mujoco-rs.readthedocs.io/en/v7.0.x/)
-[![docs.rs](https://img.shields.io/docsrs/mujoco-rs/7.0.0)](https://docs.rs/mujoco-rs/7.0.0/mujoco_rs/)
+[![Guide](https://img.shields.io/badge/Guide-book-white)](https://mujoco-rs.readthedocs.io/en/v7.1.x/)
+[![docs.rs](https://img.shields.io/docsrs/mujoco-rs/7.1.0)](https://docs.rs/mujoco-rs/7.1.0/mujoco_rs/)
 [![CI](https://img.shields.io/github/actions/workflow/status/davidhozic/mujoco-rs/tests.yml?label=CI)](https://github.com/davidhozic/mujoco-rs/actions)
 [![Crates.io](https://img.shields.io/crates/v/mujoco-rs.svg)](https://crates.io/crates/mujoco-rs)
 
 > [!IMPORTANT]
 > **Upgrading from 6.x to 7.x?** The 7.0.0 release updated MuJoCo to 3.17.0.
-> Read the [migration guide](https://mujoco-rs.readthedocs.io/en/v7.0.x/migration.html)
+> Read the [migration guide](https://mujoco-rs.readthedocs.io/en/v7.1.x/migration.html)
 > before upgrading.
 
 MuJoCo bindings and high-level wrappers for the Rust programming language. Includes a Rust-native viewer and also
@@ -14,10 +14,21 @@ bindings to a modified C++ one.
 
 [MuJoCo](https://mujoco.org/) is a general purpose physics simulator.
 
+<p align="center">
+<img src="docs/img_common/viewer_spot.gif" alt="The built-in Rust viewer with the Spot robot">
+</p>
+
+<p align="center">
+Demo of the built-in Rust viewer. Showing a scene from
+<a href="https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot">MuJoCo's menagerie</a>.
+Requires the <code>viewer</code> feature or the <code>viewer-ui</code> feature for UI support.
+</p>
+
+
 ## Documentation
 More detailed documentation is available at the:
-- [**API docs**](https://docs.rs/mujoco-rs/7.0.0/mujoco_rs/)
-- [**Guide book**](https://mujoco-rs.readthedocs.io/en/v7.0.x/)
+- [**API docs**](https://docs.rs/mujoco-rs/7.1.0/mujoco_rs/)
+- [**Guide book**](https://mujoco-rs.readthedocs.io/en/v7.1.x/)
 
 ## MuJoCo version
 This library uses FFI bindings to MuJoCo **3.17.0**.
@@ -26,7 +37,7 @@ This library uses FFI bindings to MuJoCo **3.17.0**.
 Rust version 1.95 or newer is required.
 
 ## Installation
-For installation, see the [**guide book**](https://mujoco-rs.readthedocs.io/en/v7.0.x/installation.html).
+For installation, see the [**guide book**](https://mujoco-rs.readthedocs.io/en/v7.1.x/installation.html).
 
 ### Missing library errors
 The guide book also contains information on how to **configure MuJoCo**.
@@ -34,7 +45,7 @@ MuJoCo-rs cannot fully configure it itself due to MuJoCo being a shared C librar
 **load-time errors** about **missing libraries**.
 
 Information on how to configure MuJoCo and resolve these issues is available
-[here](https://mujoco-rs.readthedocs.io/en/v7.0.x/installation.html#mujoco).
+[here](https://mujoco-rs.readthedocs.io/en/v7.1.x/installation.html#mujoco).
 
 ## Main features
 MuJoCo-rs tries to stay close to MuJoCo's C API, with a few additional features for ease of use.
@@ -54,13 +65,6 @@ The main features on top of MuJoCo include:
   - Renderer: offscreen rendering to array or file.
   - Viewer: onscreen visualization of the 3D simulation.
 
-
-## Rust-native viewer
-Screenshot of the built-in Rust viewer. Showing a scene from [MuJoCo's menagerie](https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot).
-Requires the `viewer` feature or the `viewer-ui` feature for UI support.
-![](docs/img_common/viewer_spot.png)
-
-
 ## Optional Cargo features
 Optional Cargo features can be enabled:
 
@@ -70,7 +74,7 @@ Optional Cargo features can be enabled:
     This also allows users to add custom [`egui`](https://docs.rs/egui/0.36.1/egui/) widgets to the viewer.
 
 - ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer.
-  This requires static linking to a modified fork of MuJoCo, as described in [installation](https://mujoco-rs.readthedocs.io/en/v7.0.x/installation.html#static-linking).
+  This requires static linking to a modified fork of MuJoCo, as described in [installation](https://mujoco-rs.readthedocs.io/en/v7.1.x/installation.html#static-linking).
 - ``renderer``: enables offscreen rendering for writing RGB and
   depth data to memory or file.
 
@@ -85,7 +89,7 @@ Optional Cargo features can be enabled:
   - The environment variable ``MUJOCO_DOWNLOAD_DIR`` must be
     set to the absolute path of the download location.
   - Downloaded MuJoCo library is still a shared library. See
-    [installation](https://mujoco-rs.readthedocs.io/en/v7.0.x/installation.html#mujoco)
+    [installation](https://mujoco-rs.readthedocs.io/en/v7.1.x/installation.html#mujoco)
     for information on complete configuration.
   - **Cross-OS downloads are not supported** (e.g. a Windows target from a Linux host).
 
@@ -94,7 +98,7 @@ By default, no optional features are enabled. Enable the features you need expli
 
 On macOS, the visualization features (``viewer`` and ``renderer``) do not work without
 patching the ``glutin`` dependency. See
-[installation](https://mujoco-rs.readthedocs.io/en/v7.0.x/installation.html#macos-glutin-patch)
+[installation](https://mujoco-rs.readthedocs.io/en/v7.1.x/installation.html#macos-glutin-patch)
 for instructions.
 
 
@@ -104,7 +108,7 @@ This example requires the ``viewer`` or the ``viewer-ui`` feature
 It launches the viewer and prints the coordinates
 of a moving ball to the terminal.
 Other examples are available in the
-[``examples/``](https://github.com/davidhozic/mujoco-rs/tree/v7.0.x/examples) directory.
+[``examples/``](https://github.com/davidhozic/mujoco-rs/tree/v7.1.x/examples) directory.
 
 ```rust
 //! Example of using views.
