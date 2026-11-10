@@ -7,6 +7,7 @@
 //! - [`MjModelError`] - model loading, saving, and state operations (`MjModel`).
 //! - [`MjVfsError`] - virtual file system operations (`MjVfs`).
 //! - [`MjPluginError`] - plugin library loading operations.
+//! - [`MjBatchError`] - batched simulation operations ([`MjBatch`](crate::wrappers::MjBatch)).
 //! - [`GlInitError`] - OpenGL / window initialization (feature-gated).
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -553,6 +554,54 @@ impl fmt::Display for MjPluginError {
 }
 
 impl std::error::Error for MjPluginError {}
+
+/// Errors that can occur in batched simulation ([`MjBatch`](crate::wrappers::MjBatch)) operations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum MjBatchError {
+    /// MuJoCo failed to create the batch. Carries MuJoCo's error message.
+    MakeFailed(String),
+    /// The data was created from a model that is not compatible with the batch's model.
+    IncompatibleModel {
+        /// Layout of the batch's model.
+        source: Arc<MjModelLayout>,
+        /// Layout of the data's model.
+        destination: Arc<MjModelLayout>,
+    },
+    /// The name is not an [`MjData`](crate::wrappers::MjData) field that the batch can output.
+    /// Carries the name.
+    InvalidOutput(String),
+    /// The name is not an [`MjModel`](crate::wrappers::MjModel) field that the batch can expand.
+    /// Carries the name.
+    InvalidExpand(String),
+    /// The name is not an expanded [`MjModel`](crate::wrappers::MjModel) field of the batch.
+    /// Carries the name.
+    NotExpanded(String),
+    /// The requested element type does not match the elements of the field.
+    FieldTypeMismatch {
+        /// Name of the field.
+        name: String,
+        /// Size of one element of the field, in bytes.
+        element_size: usize,
+    },
+}
+
+impl fmt::Display for MjBatchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MakeFailed(msg) => write!(f, "batch creation failed: {msg}"),
+            Self::IncompatibleModel { .. } => write!(f, "incompatible model"),
+            Self::InvalidOutput(name) => write!(f, "invalid batch output field '{name}'"),
+            Self::InvalidExpand(name) => write!(f, "invalid batch expand field '{name}'"),
+            Self::NotExpanded(name) => write!(f, "batch field '{name}' is not expanded"),
+            Self::FieldTypeMismatch { name, element_size } => write!(
+                f, "element type does not match field '{name}' ({element_size}-byte elements)"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for MjBatchError {}
 
 /// Errors that can occur during OpenGL / window initialization.
 ///

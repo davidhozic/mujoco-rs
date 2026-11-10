@@ -4,6 +4,7 @@ pub use crate::error::{
     MjPluginError,
     MjModelError,
     MjSceneError,
+    MjBatchError,
     MjEditError,
     MjDataError,
     MjVfsError,
@@ -16,6 +17,9 @@ pub use crate::wrappers::mj_editing::{
     MjSpec, MjtConflict, MjFlexcompConfig,
     SpecElement, SpecItem, SpecObject, UserValued, Attach, AttachTo, FrameChild
 };
+
+pub use crate::wrappers::mj_batch::{MjBatch, MjBatchConfig};
+
 pub use crate::logging::{
     install_logging_hook, set_log_handler
 };

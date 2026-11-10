@@ -32,6 +32,9 @@ jobs:
       - name: Generate Cargo.lock
         run: cargo generate-lockfile
 
+      - name: Prepare submodules
+        run: git submodule update --init --force
+
       - name: Prepare features string
         run: |
           echo "MJRS_FEATURES=\"${{join(matrix.features, ' ')}}\"" >> $GITHUB_ENV
@@ -95,7 +98,16 @@ jobs:
 
       - name: cargo test (release)
         run: cargo test --release --lib --features ${{env.MJRS_FEATURES}} --no-default-features
-     
+
+      - name: cargo test ignored (single thread)
+        run: cargo test --lib --features ${{env.MJRS_FEATURES}} --no-default-features -- --ignored --test-threads=1
+
+      - name: cargo test (documentation)
+        run: cargo test --doc --features ${{env.MJRS_FEATURES}} --no-default-features
+
+      - name: cargo test (model compatibility)
+        run: cargo test --test model_compatibility --features ${{env.MJRS_FEATURES}} --no-default-features
+
       - name: Run a rendering test
         if: contains(matrix.features, 'renderer') && runner.os == 'Linux'
         run: cargo run --release --example renderer --features ${{env.MJRS_FEATURES}} --no-default-features

@@ -1160,6 +1160,30 @@ impl MjViewer {
         self.swap_buffers()
     }
 
+    /// Requests a close of the viewer. This can go one of two ways, depending on whether the viewer has been compiled
+    /// with the 'viewer-ui' feature enabled.
+    ///
+    /// If the said feature **is enabled**, it will show a confirmation modal to
+    /// the user.
+    ///
+    /// If the said feature **is not enabled**, the viewer will close as soon as possible, thus this method
+    /// will behave identically to [`MjViewer::force_close`].
+    pub fn request_close(&mut self) {
+        cfg_select! {
+            feature = "viewer-ui" => {
+                if self.ui.request_close() {
+                    self.force_close();  // The exit modal was already open -> another request is a confirmation.
+                }
+            }
+            _ => { self.force_close(); }
+        }
+    }
+
+    /// Instructs the viewer to close as soon as possible, without showing any potential exit confirmation.
+    pub fn force_close(&self) {
+        self.running_flag.store(false, Ordering::Relaxed);
+    }
+
     /// Prepares MuJoCo OpenGL for rendering in MuJoCo 3D mode.
     #[cfg(feature = "viewer-ui")]
     fn init_mujoco_gl(&self) {
@@ -1330,8 +1354,10 @@ impl MjViewer {
                 // SAFETY: the GL context was made current in render() before this call.
                 self.context = unsafe { Self::make_render_context(new_model, gl_surface) };
                 self.ncam = new_model.ffi().ncam;
+
                 #[cfg(feature = "viewer-ui")]
-                self.ui.update_caches(new_model);
+                self.ui.reset_to_model(new_model);
+
                 // reload_model already cleared the pending re-upload sets.
 
                 // The scene has been recreated after a model has been changed.
@@ -1472,7 +1498,7 @@ impl MjViewer {
         let left = self.ui.process(
             window, &mut self.status,
             &mut self.scene, &mut self.opt,
-            &mut self.camera, &self.shared_state,
+            &mut self.camera, &self.shared_state, &self.running_flag
         );
 
         // Make context current again after user's custom UI callbacks possibly changing the current context.
@@ -1486,7 +1512,7 @@ impl MjViewer {
         while let Some(event) = self.ui.drain_events() {
             use UiEvent::*;
             match event {
-                Close => self.running_flag.store(false, Ordering::Relaxed),
+                Close => self.request_close(),
                 Fullscreen => self.toggle_full_screen(),
                 ResetSimulation => {
                     let mut lock = self.shared_state.lock_unpoison();
@@ -1604,20 +1630,19 @@ impl MjViewer {
                     self.process_cursor_pos(x, y);
                 }
 
-                // Set the viewer's state to pending exit.
+                // Request a close on Ctrl+Q (or open exit modal under `viewer-ui` feature enabled).
                 WindowEvent::KeyboardInput {
                     event: KeyEvent {
                         physical_key: PhysicalKey::Code(KeyCode::KeyQ),
                         state: ElementState::Pressed, ..
                     }, ..
                 } if self.modifiers.state().control_key()  => {
-                    self.running_flag.store(false, Ordering::Relaxed);
+                    self.request_close();
                 }
 
-                // Also set the viewer's state to pending exit if the window no longer exists.
+                // Request a close on window close (or open exit modal under `viewer-ui` feature enabled).
                 WindowEvent::CloseRequested => {
-                    debug!("the user closed the viewer window");
-                    self.running_flag.store(false, Ordering::Relaxed);
+                    self.request_close();
                 }
 
                 // Free the camera from tracking.
@@ -1911,29 +1936,28 @@ impl MjViewer {
                         (y - rect.bottom as MjtNum) / rect.height as MjtNum
                     );
 
-                    // Set tracking camera
-                    if modifier_state.alt_key() {
-                        if let Some(body_id) = sel.body_id {
-                            self.camera.lookat = sel.point;
-                            if modifier_state.control_key() {
-                                self.camera.track(body_id);
-                            }
+                    // Either track, do nothing, change the look-at point or change the selected target.
+                    let (ctrl, alt) = (modifier_state.control_key(), modifier_state.alt_key());
+                    if let Some(body_id) = sel.body_id {
+                        match (ctrl, alt) {
+                            (true, true) => self.camera.track(body_id),  // ctrl + alt
+                            (true, false) => {}  // ctrl
+                            (false, true) => self.camera.lookat = sel.point,  // alt
+                            (false, false) => {  // no ctrl, no alt
+                                pert.select = body_id as i32;
+                                pert.flexselect = sel.flex_id.map(|v| v as i32).unwrap_or(-1);
+                                pert.skinselect = sel.skin_id.map(|v| v as i32).unwrap_or(-1);
+                                pert.active = 0;
+                                pert.update_local_pos(&sel.point, data_passive);
+                            },
                         }
                     }
-                    else {
-                        // Mark selection
-                        if let Some(body_id) = sel.body_id {
-                            pert.select = body_id as i32;
-                            pert.flexselect = sel.flex_id.map(|v| v as i32).unwrap_or(-1);
-                            pert.skinselect = sel.skin_id.map(|v| v as i32).unwrap_or(-1);
-                            pert.active = 0;
-                            pert.update_local_pos(&sel.point, data_passive);
-                        }
-                        else {
-                            pert.select = -1;
-                            pert.flexselect = -1;
-                            pert.skinselect = -1;
-                        }
+                    // Reset perturbation.
+                    else if !(ctrl || alt) {
+                        pert.select = -1;
+                        pert.flexselect = -1;
+                        pert.skinselect = -1;
+                        pert.active = 0;
                     }
                 }
                 self.last_bnt_press_time = Instant::now();

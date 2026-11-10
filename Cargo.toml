@@ -11,7 +11,8 @@ unnecessary_lazy_evaluations = "allow"
 
 [package]
 name = "mujoco-rs"
-version = "7.0.0+mj-3.17.0"
+links = "mujoco"
+version = "7.1.0+mj-3.17.0"
 edition = "2024"
 license-file.workspace = true
 description = "A high-level Rust wrapper around the MuJoCo C library, with a native viewer (re-)written in Rust."
@@ -50,6 +51,10 @@ name = "basic"
 path = "examples/simulation/basic.rs"
 
 [[example]]
+name = "batched"
+path = "examples/simulation/batched.rs"
+
+[[example]]
 name = "model_parameters"
 path = "examples/simulation/model_parameters.rs"
 
@@ -58,8 +63,8 @@ name = "logging"
 path = "examples/simulation/logging.rs"
 
 [[example]]
-name = "actuator_inputs"
-path = "examples/visualization/viewer/actuator_inputs.rs"
+name = "control_windows"
+path = "examples/visualization/viewer/control_windows.rs"
 required-features = ["viewer-ui"]
 
 [[example]]

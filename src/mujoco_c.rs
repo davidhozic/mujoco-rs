@@ -6410,6 +6410,175 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn mjs_asPlugin(element: *mut mjsElement) -> *mut mjsPlugin;
 }
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct mjBatch_ {
+    _unused: [u8; 0],
+}
+pub type mjBatch = mjBatch_;
+pub type mjfBatchFunc = ::std::option::Option<
+    unsafe extern "C" fn(
+        m: *const mjModel,
+        d: *mut mjData,
+        sim: ::std::os::raw::c_int,
+        arg: *mut ::std::os::raw::c_void,
+    ),
+>;
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct mjBatchConfig_ {
+    pub nthread: ::std::os::raw::c_int,
+    pub persistent: mjtBool,
+}
+pub type mjBatchConfig = mjBatchConfig_;
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct mjBatchRecord_ {
+    pub(crate) field: *const ::std::os::raw::c_char,
+    pub(crate) spec: ::std::os::raw::c_int,
+    pub(crate) buf: *mut ::std::os::raw::c_void,
+}
+pub type mjBatchRecord = mjBatchRecord_;
+unsafe extern "C" {
+    pub fn mjb_defaultConfig(config: *mut mjBatchConfig);
+}
+unsafe extern "C" {
+    pub fn mjb_makeBatch(
+        m: *const mjModel,
+        nsim: ::std::os::raw::c_int,
+        config: *const mjBatchConfig,
+        error: *mut ::std::os::raw::c_char,
+        error_sz: ::std::os::raw::c_int,
+    ) -> *mut mjBatch;
+}
+unsafe extern "C" {
+    pub fn mjb_deleteBatch(b: *mut mjBatch);
+}
+unsafe extern "C" {
+    pub fn mjb_nstate(b: *const mjBatch) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mjb_state(b: *mut mjBatch) -> *mut mjtNum;
+}
+unsafe extern "C" {
+    pub fn mjb_stateComponent(
+        b: *mut mjBatch,
+        component: ::std::os::raw::c_int,
+        size: *mut ::std::os::raw::c_int,
+    ) -> *mut mjtNum;
+}
+unsafe extern "C" {
+    pub fn mjb_warning(b: *mut mjBatch) -> *mut mjWarningStat;
+}
+unsafe extern "C" {
+    pub fn mjb_step(
+        b: *mut mjBatch,
+        ids: *const ::std::os::raw::c_int,
+        nid: ::std::os::raw::c_int,
+        nstep: ::std::os::raw::c_int,
+        stage: ::std::os::raw::c_int,
+    ) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mjb_forward(
+        b: *mut mjBatch,
+        ids: *const ::std::os::raw::c_int,
+        nid: ::std::os::raw::c_int,
+        stage: ::std::os::raw::c_int,
+    ) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mjb_reset(
+        b: *mut mjBatch,
+        ids: *const ::std::os::raw::c_int,
+        nid: ::std::os::raw::c_int,
+        key: *const ::std::os::raw::c_int,
+        stage: ::std::os::raw::c_int,
+    ) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mjb_status(b: *const mjBatch) -> *const ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mjb_error(
+        b: *const mjBatch,
+        sim: ::std::os::raw::c_int,
+    ) -> *const ::std::os::raw::c_char;
+}
+unsafe extern "C" {
+    pub fn mjb_output(
+        b: *mut mjBatch,
+        name: *const ::std::os::raw::c_char,
+        size: *mut ::std::os::raw::c_int,
+        elemsize: *mut ::std::os::raw::c_int,
+    ) -> *mut ::std::os::raw::c_void;
+}
+unsafe extern "C" {
+    pub fn mjb_expand(
+        b: *mut mjBatch,
+        name: *const ::std::os::raw::c_char,
+        size: *mut ::std::os::raw::c_int,
+        elemsize: *mut ::std::os::raw::c_int,
+    ) -> *mut ::std::os::raw::c_void;
+}
+unsafe extern "C" {
+    pub fn mjb_expanded(
+        b: *mut mjBatch,
+        name: *const ::std::os::raw::c_char,
+        size: *mut ::std::os::raw::c_int,
+        elemsize: *mut ::std::os::raw::c_int,
+    ) -> *const ::std::os::raw::c_void;
+}
+unsafe extern "C" {
+    pub fn mjb_setConst(
+        b: *mut mjBatch,
+        ids: *const ::std::os::raw::c_int,
+        nid: ::std::os::raw::c_int,
+    ) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mjb_setModels(b: *mut mjBatch, models: *const *const mjModel);
+}
+unsafe extern "C" {
+    pub fn mjb_rollout(
+        b: *mut mjBatch,
+        ids: *const ::std::os::raw::c_int,
+        nid: ::std::os::raw::c_int,
+        nstep: ::std::os::raw::c_int,
+        control: *const mjtNum,
+        control_spec: ::std::os::raw::c_int,
+        record: *const mjBatchRecord,
+        nrecord: ::std::os::raw::c_int,
+    ) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mjb_apply(
+        b: *mut mjBatch,
+        ids: *const ::std::os::raw::c_int,
+        nid: ::std::os::raw::c_int,
+        func: mjfBatchFunc,
+        arg: *mut ::std::os::raw::c_void,
+        save: ::std::os::raw::c_int,
+    ) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mjb_getModel(b: *mut mjBatch, sim: ::std::os::raw::c_int, m: *mut mjModel);
+}
+unsafe extern "C" {
+    pub fn mjb_getData(b: *mut mjBatch, sim: ::std::os::raw::c_int, d: *mut mjData);
+}
+unsafe extern "C" {
+    pub fn mjb_nsim(b: *const mjBatch) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mjb_nthread(b: *const mjBatch) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mjb_persistent(b: *const mjBatch) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mjb_model(b: *const mjBatch) -> *const mjModel;
+}
 
 /* Some enums contain extra variants that can be used in some specific context but would cause
 unsafety, undefined-behavior or out-of-bound reads if used incorrectly.

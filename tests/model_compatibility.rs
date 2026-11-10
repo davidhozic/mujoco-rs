@@ -155,7 +155,8 @@ fn moved_mesh_xml() -> String {
 fn header_fields() -> (BTreeSet<String>, BTreeSet<String>) {
     let version = env!("CARGO_PKG_VERSION").split_once("+mj-").unwrap().1;
     let path = format!("{}/mujoco-{version}/include/mujoco/mjxmacro.h", env!("CARGO_MANIFEST_DIR"));
-    let header = std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("cannot read {path}: {err}"));
+    let header = std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("cannot read {path}: {err}"))
+        .replace("\r\n", "\n");  // Windows checkouts have CRLF line endings.
     let section = |start: &str, end: &str| {
         let from = header.find(start).unwrap();
         &header[from..from + header[from..].find(end).unwrap()]

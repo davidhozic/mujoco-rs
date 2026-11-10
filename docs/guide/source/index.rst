@@ -3,16 +3,16 @@ MuJoCo-rs
 =======================
 
 
-.. image:: https://img.shields.io/docsrs/mujoco-rs/7.0.0
-    :target: https://docs.rs/mujoco-rs/7.0.0/mujoco_rs/
+.. image:: https://img.shields.io/docsrs/mujoco-rs/7.1.0
+    :target: https://docs.rs/mujoco-rs/7.1.0/mujoco_rs/
 
 
 .. image:: https://img.shields.io/crates/v/mujoco-rs.svg
     :target: https://crates.io/crates/mujoco-rs
 
-.. image:: https://img.shields.io/badge/license-MIT%20or%20Apache--2.0-blue?logo=github
-   :target: https://github.com/davidhozic/mujoco-rs
-   :alt: License: MIT OR Apache-2.0
+.. image:: https://img.shields.io/badge/license-MIT%20or%20Apache--2.0%20with%20reservation-blue?logo=github
+   :target: https://github.com/davidhozic/mujoco-rs/blob/v7.1.x/LICENSE
+   :alt: License: MIT OR Apache-2.0, with a reservation of rights
 
 
 MuJoCo bindings and wrappers for the Rust programming language.
@@ -43,7 +43,7 @@ The main features on top of MuJoCo include:
   - :ref:`mj_renderer`: offscreen rendering to array or file (enabled by the ``renderer`` feature).
   - :ref:`mj_rust_viewer`: onscreen visualization (enabled by the ``viewer`` feature, or ``viewer-ui`` for an added UI).
 
-    .. image:: ../../img_common/viewer_spot.png
+    .. image:: ../../img_common/viewer_spot.gif
         :width: 50%
 
 

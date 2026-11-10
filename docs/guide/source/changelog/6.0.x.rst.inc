@@ -458,9 +458,10 @@
 
 .. rubric:: New examples
 
-- :gh-example:`Actuator inputs <visualization/viewer/actuator_inputs.rs>` --- shows the actuator
-  controls of the :ref:`mj_rust_viewer` for every input flavour. The model also holds a limited
-  ball joint, an unlimited ball joint and a free joint, for the sliders of the "Joint" window.
+- :gh-example:`Actuator inputs <visualization/viewer/control_windows.rs>` (now
+  ``Control windows`` since MuJoCo-rs 7.1.0) --- shows the actuator controls of the
+  :ref:`mj_rust_viewer` for every input flavour. The model also holds a limited ball joint, an
+  unlimited ball joint and a free joint, for the sliders of the "Joint" window.
 - :gh-example:`Logging <simulation/logging.rs>` --- shows the three ways to receive a MuJoCo
   message: the default handler with its ``MjLogConfig``, the logging hook next to
   `env_logger <https://docs.rs/env_logger/0.11.11/env_logger/>`_ (with the target that carries the

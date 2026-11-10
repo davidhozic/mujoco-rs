@@ -1,16 +1,18 @@
-//! Example of the actuator and joint controls in the viewer UI.
-//! The model holds one actuator of every input flavour: actuators whose type defines no input
-//! names (motor, position), actuators whose control block holds several named inputs (pid,
-//! dcmotor, orientation), an actuator without a name, an actuator without control inputs, and
-//! control ranges that differ between the inputs of one actuator. It also holds a limited ball
-//! joint, an unlimited ball joint and a free joint.
+//! Example of different control-info windows inside the Viewer's (egui) UI.
 //!
 //! Open the "Actuator" window in the viewer. Each actuator holds one slider for each of its
 //! control inputs, labelled with the input name that MuJoCo reports for the actuator type.
 //!
 //! Open the "Joint" window in the viewer. Each slider writes one position component of the
-//! joint, and a free joint takes a numeric input for each component. A limited ball joint also
-//! shows its rotation angle against the limit.
+//! joint, and a free joint takes a numeric input for each translation component.
+//!
+//! Open the "Sensor" window in the viewer. Each sensor shows one value for each of its
+//! components, labelled with the axis or the quaternion component and the unit of the quantity.
+//! The free box carries a touch sensor, an accelerometer and a gyro on its site.
+//!
+//! Open the "Equality" window in the viewer. Each equality constraint holds one toggle button,
+//! which switches the constraint on or off at runtime. The connect constraint starts inactive;
+//! switch it on to attach the passive DC motor arm to the driven DC motor arm.
 use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;
@@ -19,16 +21,29 @@ use env_logger::Env;
 
 
 const EXAMPLE_MODEL: &str = stringify! {
-<mujoco model="actuator_inputs">
-  <option integrator="implicitfast"/>
+<mujoco model="control_windows">
+  // The Newton solver diverges on the gear tooth contacts; PGS stays stable.
+  <option integrator="implicitfast" solver="PGS"/>
   <statistic center=".25 0 .3" extent="4"/>
+
+  <asset>
+    <mesh name="gear_tooth" builtin="supersphere" params="10 1 1" scale=".0075 .0075 .0175"/>
+  </asset>
 
   <default>
     <geom type="capsule" size=".035" rgba=".7 .7 .75 1"/>
     <joint damping=".2"/>
+    <default class="gear">
+      <geom type="ellipsoid" size=".0075 .0075 .0175" euler="90 0 0" friction=".1" rgba=".9 .35 .65 1"/>
+    </default>
   </default>
 
   <worldbody>
+    <camera
+        name="lidar-array" pos="4.604 0.369 1.329" xyaxes="-0.232 0.973 -0.000 -0.761 -0.181 0.622"
+        resolution="10 10" fovy="20"
+    />
+
     <light pos="0 -.6 3" dir="0 .2 -1" diffuse=".8 .8 .8"/>
     <geom name="floor" type="plane" size="0 0 .05" rgba=".3 .35 .4 1"/>
 
@@ -50,11 +65,13 @@ const EXAMPLE_MODEL: &str = stringify! {
     <body name="dcmotor_arm" pos=".4 0 .4">
       <joint name="dcmotor_hinge" type="hinge" axis="0 1 0"/>
       <geom fromto="0 0 0 0 0 -.25" rgba=".9 .7 .2 1"/>
+      <site name="dcmotor_arm_site" type="box" size="0.06 0.06 0.06" pos="0 0 -0.25" rgba="0 0 0 0"/>
     </body>
 
     <body name="dcmotor_passive_arm" pos="1.1 0 .4">
       <joint name="dcmotor_passive_hinge" type="hinge" axis="0 1 0"/>
       <geom fromto="0 0 0 0 0 -.25" rgba=".6 .4 .8 1"/>
+      <site name="dcmotor_passive_arm_site" type="box" size="0.06 0.06 0.06" pos="0 0 -0.25" rgba="0 0 0 0"/>
     </body>
 
     <body name="expmap_box" pos="1.8 0 .4">
@@ -75,6 +92,21 @@ const EXAMPLE_MODEL: &str = stringify! {
     <body name="free_box" pos="3.3 0 .4">
       <freejoint name="free"/>
       <geom type="box" size=".06 .06 .06" rgba=".8 .8 .4 1"/>
+      <site name="free_site" type="box" size=".065 .065 .065" rgba="0 0 0 0"/>
+    </body>
+
+    <body name="gear1" pos="3.8 0 .4" childclass="gear">
+      <joint name="gear_hinge1" type="hinge" axis="0 1 0"/>
+      <replicate count="18" euler="0 20 0">
+        <geom name="gear1_geom" pos=".09 0 0"/>
+      </replicate>
+    </body>
+
+    <body name="gear2" pos="3.98 0 .4" euler="0 10 0" childclass="gear">
+      <joint name="gear_hinge2" type="hinge" axis="0 1 0"/>
+      <replicate count="18" euler="0 20 0">
+        <geom name="gear2_geom" pos=".09 0 0"/>
+      </replicate>
     </body>
   </worldbody>
 
@@ -92,6 +124,37 @@ const EXAMPLE_MODEL: &str = stringify! {
     <orientation name="orientation_expmap" joint="expmap_ball" kp="3" dampratio="1" ctrlrange="-3.1416 3.1416"/>
     <orientation name="orientation_quat" joint="quat_ball" input="quat" kp="3" dampratio="1" ctrlrange="-1 1"/>
   </actuator>
+
+  <sensor>
+    <jointpos name="slide_pos" joint="slide"/>
+    <jointvel name="slide_vel" joint="slide"/>
+    <jointlimitpos name="slide_limit_pos" joint="slide"/>
+    <jointpos name="pid_hinge_pos" joint="pid_hinge"/>
+    <jointactuatorfrc name="pid_hinge_actfrc" joint="pid_hinge"/>
+    <actuatorfrc name="dcmotor_frc" actuator="dcmotor_all"/>
+    <actuatorfrc name="orientation_quat_frc" actuator="orientation_quat"/>
+    <ballquat name="quat_ball_quat" joint="quat_ball"/>
+    <ballangvel name="quat_ball_angvel" joint="quat_ball"/>
+    <jointlimitpos name="limited_ball_limit_pos" joint="limited_ball"/>
+    <framepos name="free_pos" objtype="body" objname="free_box"/>
+    <framequat name="free_quat" objtype="body" objname="free_box"/>
+    <framezaxis name="free_zaxis" objtype="body" objname="free_box"/>
+    <touch name="free_touch" site="free_site"/>
+    <accelerometer name="free_acc" site="free_site"/>
+    <gyro name="free_gyro" site="free_site"/>
+    <contact name="free_contact" site="free_site" data="found force" num="5"/>
+    <tactile geom="gear1_geom" mesh="gear_tooth"/>
+    <rangefinder name="rangefinder_numero1" camera="lidar-array" data="dist normal"/>
+
+    // TODO: Uncomment when MuJoCo fixes the bug. There seems to be some issue with wrong replication when using
+    // the above <replicate> command.
+    // <clock/>
+    // <user name="user_sensor" dim="0"/>
+  </sensor>
+
+  <equality>
+    <connect site1="dcmotor_arm_site" site2="dcmotor_passive_arm_site" solref="0.25 1" active="false"/>
+  </equality>
 </mujoco>
 };
 
