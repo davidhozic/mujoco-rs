@@ -310,7 +310,7 @@ impl ViewerUI {
             windows::state::show(ui, &mut self.state_info, shared_viewer_state);
 
             // State recorder window
-            windows::recorder::state::show(ui, &mut self.state_recorder_data);
+            windows::recorder::state::show(ui, &mut self.state_recorder_data, shared_viewer_state);
 
             /* Modals */
             // Camera tracking modal
