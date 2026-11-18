@@ -192,7 +192,9 @@ cpp-viewer = []
 
 ffi-regenerate = ["dep:regex", "dep:bindgen"]  # Generate the ffi bindings. Only used for updating the committed ``mujoco_c`` module.
 
-auto-download-mujoco = ["dep:ureq", "dep:flate2", "dep:tar", "dep:zip", "dep:sha2"]
+# Automatic downloads
+auto-download-mujoco = ["auto-download-dynamic-mujoco"]  # deprecated for auto-download-dynamic-mujoco
+auto-download-dynamic-mujoco = ["dep:ureq", "dep:flate2", "dep:tar", "dep:zip", "dep:sha2"]
 
 default = []
 

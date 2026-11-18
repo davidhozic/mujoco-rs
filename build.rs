@@ -265,10 +265,14 @@ fn main() {
         return;
     }
 
-    // Read the target OS from Cargo's environment (reflects the compilation TARGET, not the host).
-    // Using CARGO_CFG_TARGET_OS here is intentional: build scripts are compiled for the HOST
-    // machine, so cfg!(target_os = "...") would reflect the host OS, not the target being
-    // compiled for. CARGO_CFG_TARGET_OS is always set by Cargo before invoking build scripts.
+    // Deprecated
+    #[cfg(feature = "auto-download-mujoco")]
+    println!(
+        "cargo::warning=Cargo feature 'auto-download-mujoco' has been replaced with \
+        'auto-download-dynamic-mujoco' for dynamic linking."
+    );
+
+    // Use cargo's target host instead of env, for cross-compilation purposes.
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
 
     // Verify feature selection before compilation.
@@ -401,7 +405,7 @@ fn main() {
                     Err(_err) => {
                         cfg_select! {
                             target_os = "macos" => {
-                                #[cfg(feature = "auto-download-mujoco")]
+                                #[cfg(feature = "auto-download-dynamic-mujoco")]
                                 compile_error!("automatic downloads are not supported on macOS");
 
                                 panic!(
@@ -413,7 +417,7 @@ fn main() {
                             }
                             _ => {
                                 cfg_select! {
-                                    feature = "auto-download-mujoco" => {
+                                    feature = "auto-download-dynamic-mujoco" => {
                                         download_mujoco(mujoco_version)
                                     },
 
@@ -424,7 +428,7 @@ fn main() {
                                             \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} \
                                             nor {MUJOCO_DYN_LIB_PATH_VAR} is set.\
                                             \nConsider enabling automatic download: \
-                                            'cargo add mujoco-rs --features \"auto-download-mujoco\"'."
+                                            'cargo add mujoco-rs --features \"auto-download-dynamic-mujoco\"'."
                                         )
                                     }
                                 }
@@ -435,16 +439,16 @@ fn main() {
             }
             _ => {
                 cfg_select! {
-                    feature = "auto-download-mujoco" => {
+                    feature = "auto-download-dynamic-mujoco" => {
                         download_mujoco(mujoco_version)
                     },
 
                     _ => {
                         panic!(
                             "neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set \
-                            and the 'auto-download-mujoco' Cargo feature is disabled.\
+                            and the 'auto-download-dynamic-mujoco' Cargo feature is disabled.\
                             \nConsider enabling automatic download: \
-                            'cargo add mujoco-rs --features \"auto-download-mujoco\"'."
+                            'cargo add mujoco-rs --features \"auto-download-dynamic-mujoco\"'."
                         )
                     }
                 }
@@ -464,7 +468,7 @@ fn main() {
 
 // Auto-download MuJoCo (Linux and Windows, same-OS builds only).
 #[cfg(not(target_os = "macos"))]
-#[cfg(feature = "auto-download-mujoco")]
+#[cfg(feature = "auto-download-dynamic-mujoco")]
 fn download_mujoco(mujoco_version: &str) -> PathBuf {
     use std::io::{BufReader, Read};
     use sha2::Digest;
@@ -476,18 +480,11 @@ fn download_mujoco(mujoco_version: &str) -> PathBuf {
             (and potentially add the path to LD_LIBRARY_PATH)"
         )
     });
-
-    #[cfg(target_os = "linux")]
-    let download_url = format!(
-        "{MUJOCO_BASE_DOWNLOAD_LINK}/{mujoco_version}/mujoco-{mujoco_version}-linux-{target_arch}.tar.gz"
-    );
-    #[cfg(target_os = "windows")]
-    let download_url = format!(
-        "{MUJOCO_BASE_DOWNLOAD_LINK}/{mujoco_version}/mujoco-{mujoco_version}-windows-{target_arch}.zip"
-    );
-
-    let download_hash_url = format!("{download_url}.sha256");
-
+    let download_file_name = cfg_select!{
+        target_os = "linux" => format!("mujoco-{mujoco_version}-linux-{target_arch}.tar.gz"),
+        target_os = "windows" => format!("mujoco-{mujoco_version}-windows-{target_arch}.zip"),
+    };
+    let download_url = format!("{MUJOCO_BASE_DOWNLOAD_LINK}/{mujoco_version}/{download_file_name}");
     let download_dir = PathBuf::from(std::env::var(MUJOCO_DOWNLOAD_PATH_VAR).unwrap_or_else(|_| {
         let os_example = if cfg!(target_os = "linux") {
             format!("e.g., export {MUJOCO_DOWNLOAD_PATH_VAR}=\"$(realpath .)\"")
@@ -495,7 +492,7 @@ fn download_mujoco(mujoco_version: &str) -> PathBuf {
             format!("e.g., $env:{MUJOCO_DOWNLOAD_PATH_VAR}=\"/full/absolute/path/\"")
         };
         panic!(
-            "when Cargo feature 'auto-download-mujoco' is enabled, \
+            "when Cargo feature 'auto-download-dynamic-mujoco' is enabled, \
             {MUJOCO_DOWNLOAD_PATH_VAR} must be set to an absolute path where MuJoCo \
             will be extracted --- {os_example}",
         );
@@ -513,7 +510,6 @@ fn download_mujoco(mujoco_version: &str) -> PathBuf {
     let libdir_path = outdirname.join("lib");
     if !libdir_path.exists() {
         let download_path = download_dir.join(download_url.rsplit_once("/").unwrap().1);
-        let download_hash_path = download_dir.join(download_hash_url.rsplit_once("/").unwrap().1);
 
         // Download the archive.
         let mut response = ureq::get(&download_url).call().expect("failed to download MuJoCo");
@@ -526,26 +522,6 @@ fn download_mujoco(mujoco_version: &str) -> PathBuf {
         );
         std::io::copy(&mut body_reader, &mut file).unwrap_or_else(
             |err| panic!("failed to copy archive contents to '{}' ({err})", download_path.display())
-        );
-
-        // Download the hash file.
-        response = ureq::get(&download_hash_url).call().expect("failed to download MuJoCo's hash file");
-        body_reader = response.body_mut().as_reader();
-        let mut file = File::create(&download_hash_path).unwrap_or_else(
-            |err| panic!("could not save archive '{}' ({err})", download_hash_path.display())
-        );
-        std::io::copy(&mut body_reader, &mut file).unwrap_or_else(
-            |err| panic!("failed to copy archive contents to '{}' ({err})", download_hash_path.display())
-        );
-
-        // Verify file integrity via SHA-256.
-        let mut hashfile_data = String::new();
-        file = File::open(&download_hash_path).expect("failed to open the hash file");
-        file.read_to_string(&mut hashfile_data).expect("failed to read hash file contents");
-        // The official hash files disagree per platform: 'sha256sum' output ('<hash>  <file>')
-        // on Linux, a bare hash on Windows, and neither guarantees the hex case.
-        let hash_official = hashfile_data.split_whitespace().next().unwrap_or_else(||
-            panic!("hash file '{}' holds no hash", download_hash_path.display())
         );
 
         file = File::open(&download_path).unwrap();
@@ -561,12 +537,27 @@ fn download_mujoco(mujoco_version: &str) -> PathBuf {
             }
             hasher.update(&buffer[..n]);
         }
-        let result: String = hasher.finalize()
+        let calculated_hash: String = hasher.finalize()
             .iter().map(|byte| format!("{byte:02x}")).collect();
-        if !hash_official.eq_ignore_ascii_case(&result) {
+
+        let maybe_expected_hash = match download_file_name.as_str() {
+            "mujoco-3.17.0-linux-aarch64.tar.gz" => Some("55467a37b74e7d943899768aee820e6754a66811ae5ffa17d2768f0c40fc983a"),
+            "mujoco-3.17.0-linux-x86_64.tar.gz" => Some("b3246fc698ca27e05ce36047fe2b6866fe23c9e95a26b3a84dd48f011b85e3e4"),
+            "mujoco-3.17.0-windows-x86_64.zip" => Some("84d92054e767d0b24b7a8a5c7f3e34e883eb8e4bf7e8eefd7604dd09d999a517"),
+            _ => {
+                println!(
+                    "cargo::warning=Skipping hash verification for '{download_url}' due to missed match case. \
+                    Please report (to MuJoCo-rs GitHub issues) a bug for a missing configuration."
+                );
+                None
+            }
+        };
+
+        // Check that the hash is the same.
+        if let Some(hash) = maybe_expected_hash && hash != calculated_hash {
             panic!(
-                "sha256sum of '{}' does not match \
-                the one stored in the official hash file --- stopping due to security concerns!",
+                "sha256sum ({calculated_hash}) of '{}' does not match the expected in \
+                MuJoCo-rs build script ({hash}). Stopping for security reasons.",
                 download_path.display()
             );
         }
@@ -580,9 +571,6 @@ fn download_mujoco(mujoco_version: &str) -> PathBuf {
         std::fs::remove_file(&download_path).unwrap_or_else(
             |err| panic!("failed to delete archive '{}' ({err})", download_path.display())
         );
-        std::fs::remove_file(&download_hash_path).unwrap_or_else(
-            |err| panic!("failed to delete hash file '{}' ({err})", download_hash_path.display())
-        );
     }
 
     println!("cargo::rustc-link-search={}", libdir_path.display());
@@ -591,7 +579,7 @@ fn download_mujoco(mujoco_version: &str) -> PathBuf {
 }
 
 #[cfg(target_os = "windows")]
-#[cfg(feature = "auto-download-mujoco")]
+#[cfg(feature = "auto-download-dynamic-mujoco")]
 fn extract_windows(filename: &Path, outdirname: &Path) {
     let file = File::open(filename).unwrap_or_else(|err|
         panic!("failed to open archive '{}' ({err}).", filename.display())
@@ -603,7 +591,7 @@ fn extract_windows(filename: &Path, outdirname: &Path) {
     for i in 0..zip.len() {
         let mut zipfile = zip.by_index(i).unwrap();
         let mut path = if let Some(path) = zipfile.enclosed_name() { path } else {
-            println!("cargo:warning=Skipped potentially unsafe ZIP entry '{}' during extraction", zipfile.name());
+            println!("cargo::warning=Skipped potentially unsafe ZIP entry '{}' during extraction", zipfile.name());
             continue;
         };
 
@@ -633,7 +621,7 @@ fn extract_windows(filename: &Path, outdirname: &Path) {
 }
 
 #[cfg(target_os = "linux")]
-#[cfg(feature = "auto-download-mujoco")]
+#[cfg(feature = "auto-download-dynamic-mujoco")]
 fn extract_linux(filename: &Path) {
     let file = File::open(filename).unwrap_or_else(
         |err| panic!("failed to open '{}' ({err})", filename.display())
