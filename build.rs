@@ -313,24 +313,7 @@ fn main() {
         }
 
         println!("cargo::rerun-if-changed={}", path_lib_file.display());
-        println!("cargo::rustc-link-search={}", path_lib_dir_display);
-
-        #[cfg(feature = "cpp-viewer")]
-        {
-            println!("cargo::rustc-link-lib=static=simulate");
-            println!("cargo::rustc-link-lib=static=glfw3");
-        }
-
-        println!("cargo::rustc-link-lib=static=mujoco");
-        println!("cargo::rustc-link-lib=static=tinyxml2");
-        println!("cargo::rustc-link-lib=static=qhullstatic_r");
-        println!("cargo::rustc-link-lib=static=ccd");
-
-        if target_os == "linux" {
-            println!("cargo::rustc-link-lib=stdc++");
-        } else if target_os == "macos" {
-            println!("cargo::rustc-link-lib=c++");
-        }
+        link_static(&target_os);
         path_lib_dir
     }
 
@@ -360,8 +343,7 @@ fn main() {
             );
         }
 
-        println!("cargo::rustc-link-search={}", path_lib_dir_display);
-        println!("cargo::rustc-link-lib=dylib=mujoco");
+        link_dynamic();
         path_lib_dir
     }
 
@@ -434,13 +416,41 @@ fn main() {
     };
 
     // Metadata path for users to be able to detect which library path is used.
+    let full_path = library_dir_path.canonicalize().unwrap();
+    let full_path_display = full_path.display();
     println!(
-        "cargo::metadata=lib_dir={}",
-        library_dir_path.canonicalize().unwrap().display()  // unwrap only fails if path does not exist or is not a dir.
+        "cargo::metadata=lib_dir={full_path_display}",
+          // unwrap only fails if path does not exist or is not a dir.
     );
+
+    // Setup library search path
+    println!("cargo::rustc-link-search={full_path_display}");
 
     #[cfg(feature = "ffi-regenerate")]
     build_dependencies::generate_ffi();
+}
+
+fn link_dynamic() {
+    println!("cargo::rustc-link-lib=dylib=mujoco");
+}
+
+fn link_static(target_os: &str) {
+    #[cfg(feature = "cpp-viewer")]
+    {
+        println!("cargo::rustc-link-lib=static=simulate");
+        println!("cargo::rustc-link-lib=static=glfw3");
+    }
+
+    println!("cargo::rustc-link-lib=static=mujoco");
+    println!("cargo::rustc-link-lib=static=tinyxml2");
+    println!("cargo::rustc-link-lib=static=qhullstatic_r");
+    println!("cargo::rustc-link-lib=static=ccd");
+
+    if target_os == "linux" {
+        println!("cargo::rustc-link-lib=stdc++");
+    } else if target_os == "macos" {
+        println!("cargo::rustc-link-lib=c++");
+    }
 }
 
 /// Downloads the official MuJoCo dynamically linked library.
@@ -477,6 +487,7 @@ fn download_mujoco_dynamic(version: &str, host_os: &str) -> PathBuf {
             }
         }
     };
+    link_dynamic();
     download_mujoco(version, download_url, hash_verifier)
 }
 
@@ -515,6 +526,8 @@ fn download_mujoco_static(version: &str, host_os: &str) -> PathBuf {
             }
         }
     };
+
+    link_static(host_os);
     download_mujoco(version, download_url, hash_verifier)
 }
 
@@ -554,7 +567,6 @@ fn download_mujoco(
     let outdirname = download_dir.join(format!("mujoco-{mujoco_version}"));
     let libdir_path = outdirname.join("lib");
     if !libdir_path.exists() {
-
         // Download the archive.
         let mut response = ureq::get(&download_url).call().expect("failed to download MuJoCo");
         let mut body_reader = response.body_mut().as_reader();
@@ -608,9 +620,6 @@ fn download_mujoco(
             |err| panic!("failed to delete archive '{}' ({err})", download_path.display())
         );
     }
-
-    println!("cargo::rustc-link-search={}", libdir_path.display());
-    println!("cargo::rustc-link-lib=mujoco");
     libdir_path
 }
 
