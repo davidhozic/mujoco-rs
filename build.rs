@@ -493,7 +493,7 @@ fn download_mujoco_dynamic(version: &str, host_os: &str) -> PathBuf {
         }
     };
     link_dynamic();
-    download_mujoco(version, download_url, hash_verifier, "")
+    download_mujoco(version, download_url, hash_verifier, "", ".mujoco")
 }
 
 /// Downloads the unofficial MuJoCo staticically linked library.
@@ -506,15 +506,18 @@ fn download_mujoco_static(version: &str, host_os: &str) -> PathBuf {
             MuJoCo and specify {MUJOCO_STATIC_LIB_PATH_VAR}."
         )
     });
-    let filename = format!(
-        "mujoco-unofficial-{version}-static-{host_os}-{target_arch}.{}",
+
+    let filename_of_dep = |dep| format!(
+        "{dep}-unofficial-{version}-static-{host_os}-{target_arch}.{}",
         cfg_select! {
             unix => "tar.gz",
             _ => "zip"
         }
     );
-    let download_url = format!("{MUJOCO_DOWNLOAD_LINK}/{version}-static/{filename}");
-    let hash_verifier = |name: &str| {
+
+    let filename_mujoco = filename_of_dep("mujoco");
+    let download_url_mujoco = format!("{MUJOCO_DOWNLOAD_LINK}/{version}-static/{filename_mujoco}");
+    let hash_verifier_mujoco = |name: &str| {
         match name {
             "mujoco-unofficial-3.17.0-static-linux-aarch64.tar.gz" => Some("aeda53639d987c16296d079de841858288ad07c7499e3c1e9c02d5972e5616fa"),
             "mujoco-unofficial-3.17.0-static-linux-x86_64.tar.gz" => Some("7aa207ffaf76ca11f05f7ee4917e4c6d5a80b0579e4ce79b77693958779757a5"),
@@ -531,9 +534,31 @@ fn download_mujoco_static(version: &str, host_os: &str) -> PathBuf {
             }
         }
     };
-
     link_static(host_os);
-    download_mujoco(version, download_url, hash_verifier, "-static")
+    #[cfg(feature = "cpp-viewer")]  // Also download libsimulate dependency
+    {
+        let filename_simulate = filename_of_dep("simulate");
+        let download_url_simulate = format!("{MUJOCO_DOWNLOAD_LINK}/{version}-static/{filename_simulate}");
+        let hash_verifier_simulate = |name: &str| {
+            match name {
+                "simulate-unofficial-3.17.0-static-linux-aarch64.tar.gz" => Some("00ebee4e5da82b06d47424291c5db8e73b23eb2b0d0e2016b4cbf9d6fe614e34"),
+                "simulate-unofficial-3.17.0-static-linux-x86_64.tar.gz" => Some("f5aa79f1120b6ea39daba3d30254b4b31c17217a031f9821ec02bb8106bc7415"),
+                "simulate-unofficial-3.17.0-static-macos-aarch64.tar.gz" => Some("90105fbe0f0d7ab9c1cd611a37531d7fef7462f5ea772d3e5f96e72cbbb141a7"),
+                "simulate-unofficial-3.17.0-static-macos-x86_64.tar.gz" => Some("f764b733f10981196034650ccc27a5e7d6cd8fecc21100fe748410703a891b19"),
+                "simulate-unofficial-3.17.0-static-windows-aarch64.zip" => Some("a992e13f1e5cb10cc473bcbb2bba6d68b05038d1388ed6f6932d776ab27b15cd"),
+                "simulate-unofficial-3.17.0-static-windows-x86_64.zip" => Some("788112f28253e7dfd8f110e10324785d9076982351185f2222a706e914ba2adc"),
+                _ => {
+                    println!(
+                        "cargo::warning=Skipping hash verification for '{name}' due to missed match case. \
+                        Please report (to MuJoCo-rs GitHub issues) a bug for a missing configuration."
+                    );
+                    None
+                }
+            }
+        };
+        download_mujoco(version, download_url_simulate, hash_verifier_simulate, "-static", ".simulate");
+    }
+    download_mujoco(version, download_url_mujoco, hash_verifier_mujoco, "-static", ".mujoco")
 }
 
 /// Downloads MuJoCo of version `mujoco_version` from `download_url`.
@@ -546,6 +571,7 @@ fn download_mujoco(
     download_url: String,
     hash_verifier: fn(&str) -> Option<&'static str>,
     extracted_suffix: &str,
+    touchfile_name: &str,
 ) -> PathBuf {
     use std::io::{BufReader, Read};
     use sha2::Digest;
@@ -572,7 +598,8 @@ fn download_mujoco(
 
     let outdirname = download_dir.join(format!("mujoco-{mujoco_version}{extracted_suffix}"));
     let libdir_path = outdirname.join("lib");
-    if !libdir_path.exists() {
+    let touchfile_path = outdirname.join(touchfile_name);
+    if !touchfile_path.exists() {
         // Download the archive.
         let mut response = ureq::get(&download_url).call().expect("failed to download MuJoCo");
         let mut body_reader = response.body_mut().as_reader();
@@ -624,6 +651,10 @@ fn download_mujoco(
 
         std::fs::remove_file(&download_path).unwrap_or_else(
             |err| panic!("failed to delete archive '{}' ({err})", download_path.display())
+        );
+
+        std::fs::File::create(&touchfile_path).unwrap_or_else(
+            |err| panic!("could not create touchfile {} ({err})", touchfile_path.display())
         );
     }
     libdir_path
