@@ -387,11 +387,11 @@ fn main() {
         }
 
         // ---- Same-OS builds only below this point ----
-
         cfg_select! {
-            unix => {  // pkg-config on Linux and macOS.
-                match pkg_config::Config::new().exactly_version(mujoco_version).probe("mujoco") {
-                    Ok(library) => library.link_paths.into_iter().next()
+            unix => pkg_config::Config::new()
+                .exactly_version(mujoco_version)
+                .probe("mujoco").map(
+                    |library| library.link_paths.into_iter().next()
                         .or_else(||
                             pkg_config::get_variable("mujoco", "libdir").ok()
                                 .filter(|libdir| !libdir.is_empty()).map(PathBuf::from)
@@ -399,59 +399,38 @@ fn main() {
                         .unwrap_or_else(|| panic!(
                             "pkg-config located MuJoCo, but its 'mujoco.pc' gives neither a '-L' flag nor a \
                             'libdir' variable --- set {MUJOCO_STATIC_LIB_PATH_VAR} or {MUJOCO_DYN_LIB_PATH_VAR} instead."
-                        )),
-                    Err(_err) => {
-                        cfg_select! {
-                            target_os = "macos" => {
-                                #[cfg(feature = "auto-download-dynamic-mujoco")]
-                                compile_error!("automatic downloads are not supported on macOS");
+                    )))
+                .inspect_err(|err| eprintln!(  // output is suppressed until panics.
+                    "{err}\n---------------- ^^^ pkg-config output ^^^ ----------------\n"
+                ))
+                .ok(),
+            _ => None
+        }.unwrap_or_else(||  // pkg-config did not find library or we are on Windows
+            cfg_select! {
+                // Download the official build of the dynamically linked library.
+                feature = "auto-download-dynamic-mujoco" => {cfg_select! {
+                    // We don't support macOS here due to the complexity of MuJoCo's packaging for macOS.
+                    // Feel free to submit a PR if you believe this can be universally implemented easily.
+                    target_os = "macos" => compile_error!("automatic downloads are not supported on macOS"),
+                    _ => download_mujoco_dynamic(mujoco_version)
+                }}
 
-                                panic!(
-                                    "{_err}\
-                                    \n---------------- ^^^ pkg-config output ^^^ ----------------\n\
-                                    \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} \
-                                    nor {MUJOCO_DYN_LIB_PATH_VAR} is set."
-                                );
-                            }
-                            _ => {
-                                cfg_select! {
-                                    feature = "auto-download-dynamic-mujoco" => {
-                                        download_mujoco_doynamic(mujoco_version)
-                                    },
+                // Download the un-official build of the statically linked library.
+                feature = "auto-download-static-mujoco" => {
+                    todo!()
+                }
 
-                                    _ => {
-                                        panic!(
-                                            "{_err}\
-                                            \n---------------- ^^^ pkg-config output ^^^ ----------------\n\
-                                            \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} \
-                                            nor {MUJOCO_DYN_LIB_PATH_VAR} is set.\
-                                            \nConsider enabling automatic download: \
-                                            'cargo add mujoco-rs --features \"auto-download-dynamic-mujoco\"'."
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+                _ => {
+                    panic!(
+                        "Unable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} \
+                        nor {MUJOCO_DYN_LIB_PATH_VAR} is set.\
+                        \nConsider enabling automatic download:\n\
+                        \t- Dynamic linking (official):  cargo add mujoco-rs --features \"auto-download-dynamic-mujoco\"\n\
+                        \t- Static linking (unofficial): cargo add mujoco-rs --features \"auto-download-static-mujoco\""
+                    )
                 }
             }
-            _ => {  // Windows (no pkg-config).
-                cfg_select! {
-                    feature = "auto-download-dynamic-mujoco" => {
-                        download_mujoco_doynamic(mujoco_version)
-                    },
-
-                    _ => {
-                        panic!(
-                            "neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set \
-                            and the 'auto-download-dynamic-mujoco' Cargo feature is disabled.\
-                            \nConsider enabling automatic download: \
-                            'cargo add mujoco-rs --features \"auto-download-dynamic-mujoco\"'."
-                        )
-                    }
-                }
-            }
-        }
+        )
     };
 
     // Metadata path for users to be able to detect which library path is used.
@@ -465,8 +444,9 @@ fn main() {
 }
 
 /// Downloads the official MuJoCo dynamically linked library.
+#[cfg(not(target_os = "macos"))]
 #[cfg(feature = "auto-download-dynamic-mujoco")]
-fn download_mujoco_doynamic(version: &str) -> PathBuf {
+fn download_mujoco_dynamic(version: &str) -> PathBuf {
     const MUJOCO_BASE_DYNAMIC_DOWNLOAD_LINK: &str = "https://github.com/google-deepmind/mujoco/releases/download";
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| {
         panic!(
@@ -477,7 +457,7 @@ fn download_mujoco_doynamic(version: &str) -> PathBuf {
     });
     let filename = cfg_select!{
         target_os = "linux" => format!("mujoco-{version}-linux-{target_arch}.tar.gz"),
-        target_os = "windows" => format!("mujoco-{mujoco_version}-windows-{target_arch}.zip"),
+        target_os = "windows" => format!("mujoco-{version}-windows-{target_arch}.zip"),
     };
     let download_url = format!("{MUJOCO_BASE_DYNAMIC_DOWNLOAD_LINK}/{version}/{filename}");
     let hash_verifier = |name: &str| {
