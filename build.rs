@@ -255,8 +255,6 @@ mod build_dependencies {
 const MUJOCO_STATIC_LIB_PATH_VAR: &str = "MUJOCO_STATIC_LINK_DIR";
 const MUJOCO_DYN_LIB_PATH_VAR: &str = "MUJOCO_DYNAMIC_LINK_DIR";
 const MUJOCO_DOWNLOAD_PATH_VAR: &str = "MUJOCO_DOWNLOAD_DIR";
-#[allow(dead_code)]
-const MUJOCO_BASE_DOWNLOAD_LINK: &str = "https://github.com/google-deepmind/mujoco/releases/download";
 
 fn main() {
     // Setup everything.
@@ -391,7 +389,7 @@ fn main() {
         // ---- Same-OS builds only below this point ----
 
         cfg_select! {
-            unix => {
+            unix => {  // pkg-config on Linux and macOS.
                 match pkg_config::Config::new().exactly_version(mujoco_version).probe("mujoco") {
                     Ok(library) => library.link_paths.into_iter().next()
                         .or_else(||
@@ -418,7 +416,7 @@ fn main() {
                             _ => {
                                 cfg_select! {
                                     feature = "auto-download-dynamic-mujoco" => {
-                                        download_mujoco(mujoco_version)
+                                        download_mujoco_doynamic(mujoco_version)
                                     },
 
                                     _ => {
@@ -437,10 +435,10 @@ fn main() {
                     }
                 }
             }
-            _ => {
+            _ => {  // Windows (no pkg-config).
                 cfg_select! {
                     feature = "auto-download-dynamic-mujoco" => {
-                        download_mujoco(mujoco_version)
+                        download_mujoco_doynamic(mujoco_version)
                     },
 
                     _ => {
@@ -466,13 +464,10 @@ fn main() {
     build_dependencies::generate_ffi();
 }
 
-// Auto-download MuJoCo (Linux and Windows, same-OS builds only).
-#[cfg(not(target_os = "macos"))]
+/// Downloads the official MuJoCo dynamically linked library.
 #[cfg(feature = "auto-download-dynamic-mujoco")]
-fn download_mujoco(mujoco_version: &str) -> PathBuf {
-    use std::io::{BufReader, Read};
-    use sha2::Digest;
-
+fn download_mujoco_doynamic(version: &str) -> PathBuf {
+    const MUJOCO_BASE_DYNAMIC_DOWNLOAD_LINK: &str = "https://github.com/google-deepmind/mujoco/releases/download";
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| {
         panic!(
             "unable to obtain the ARCHITECTURE information -- please manually download \
@@ -480,19 +475,48 @@ fn download_mujoco(mujoco_version: &str) -> PathBuf {
             (and potentially add the path to LD_LIBRARY_PATH)"
         )
     });
-    let download_file_name = cfg_select!{
-        target_os = "linux" => format!("mujoco-{mujoco_version}-linux-{target_arch}.tar.gz"),
+    let filename = cfg_select!{
+        target_os = "linux" => format!("mujoco-{version}-linux-{target_arch}.tar.gz"),
         target_os = "windows" => format!("mujoco-{mujoco_version}-windows-{target_arch}.zip"),
     };
-    let download_url = format!("{MUJOCO_BASE_DOWNLOAD_LINK}/{mujoco_version}/{download_file_name}");
+    let download_url = format!("{MUJOCO_BASE_DYNAMIC_DOWNLOAD_LINK}/{version}/{filename}");
+    let hash_verifier = |name: &str| {
+        match name {
+            "mujoco-3.17.0-linux-aarch64.tar.gz" => Some("55467a37b74e7d943899768aee820e6754a66811ae5ffa17d2768f0c40fc983a"),
+            "mujoco-3.17.0-linux-x86_64.tar.gz" => Some("b3246fc698ca27e05ce36047fe2b6866fe23c9e95a26b3a84dd48f011b85e3e4"),
+            "mujoco-3.17.0-windows-x86_64.zip" => Some("84d92054e767d0b24b7a8a5c7f3e34e883eb8e4bf7e8eefd7604dd09d999a517"),
+            _ => {
+                println!(
+                    "cargo::warning=Skipping hash verification for '{name}' due to missed match case. \
+                    Please report (to MuJoCo-rs GitHub issues) a bug for a missing configuration."
+                );
+                None
+            }
+        }
+    };
+    download_mujoco(version, download_url, hash_verifier)
+}
+
+/// Downloads MuJoCo of version `mujoco_version` from `download_url`.
+/// For security reasons, `hash_verifier` is used to verify the hash of the downloaded archive based on the
+/// pre-defined hash inside this build script.
+/// Linux and Windows, same-OS builds only.
+#[cfg(feature = "auto-download-dynamic-mujoco")]
+fn download_mujoco(
+    mujoco_version: &str,
+    download_url: String,
+    hash_verifier: fn(&str) -> Option<&'static str>
+) -> PathBuf {
+    use std::io::{BufReader, Read};
+    use sha2::Digest;
     let download_dir = PathBuf::from(std::env::var(MUJOCO_DOWNLOAD_PATH_VAR).unwrap_or_else(|_| {
-        let os_example = if cfg!(target_os = "linux") {
-            format!("e.g., export {MUJOCO_DOWNLOAD_PATH_VAR}=\"$(realpath .)\"")
-        } else {
-            format!("e.g., $env:{MUJOCO_DOWNLOAD_PATH_VAR}=\"/full/absolute/path/\"")
+        let os_example = cfg_select! {
+            unix => format!("e.g., export {MUJOCO_DOWNLOAD_PATH_VAR}=\"$(realpath .)\""),
+            target_os = "windows" => format!("e.g., $env:{MUJOCO_DOWNLOAD_PATH_VAR}=\"/full/absolute/path/\"")
         };
+
         panic!(
-            "when Cargo feature 'auto-download-dynamic-mujoco' is enabled, \
+            "when Cargo feature 'auto-download-dynamic-mujoco' or auto-download-static-mujoco is enabled, \
             {MUJOCO_DOWNLOAD_PATH_VAR} must be set to an absolute path where MuJoCo \
             will be extracted --- {os_example}",
         );
@@ -509,11 +533,13 @@ fn download_mujoco(mujoco_version: &str) -> PathBuf {
     let outdirname = download_dir.join(format!("mujoco-{mujoco_version}"));
     let libdir_path = outdirname.join("lib");
     if !libdir_path.exists() {
-        let download_path = download_dir.join(&download_file_name);
 
         // Download the archive.
         let mut response = ureq::get(&download_url).call().expect("failed to download MuJoCo");
         let mut body_reader = response.body_mut().as_reader();
+
+        let download_file_name = download_url.rsplit_once("/").unwrap().1;
+        let download_path = download_dir.join(&download_file_name);
         std::fs::create_dir_all(download_path.parent().unwrap()).unwrap_or_else(
             |err| panic!("failed to create parent directory of '{}' ({err})", download_path.display())
         );
@@ -540,18 +566,7 @@ fn download_mujoco(mujoco_version: &str) -> PathBuf {
         let calculated_hash: String = hasher.finalize()
             .iter().map(|byte| format!("{byte:02x}")).collect();
 
-        let maybe_expected_hash = match download_file_name.as_str() {
-            "mujoco-3.17.0-linux-aarch64.tar.gz" => Some("55467a37b74e7d943899768aee820e6754a66811ae5ffa17d2768f0c40fc983a"),
-            "mujoco-3.17.0-linux-x86_64.tar.gz" => Some("b3246fc698ca27e05ce36047fe2b6866fe23c9e95a26b3a84dd48f011b85e3e4"),
-            "mujoco-3.17.0-windows-x86_64.zip" => Some("84d92054e767d0b24b7a8a5c7f3e34e883eb8e4bf7e8eefd7604dd09d999a517"),
-            _ => {
-                println!(
-                    "cargo::warning=Skipping hash verification for '{download_url}' due to missed match case. \
-                    Please report (to MuJoCo-rs GitHub issues) a bug for a missing configuration."
-                );
-                None
-            }
-        };
+        let maybe_expected_hash = hash_verifier(download_file_name);
 
         // Check that the hash is the same.
         if let Some(hash) = maybe_expected_hash && hash != calculated_hash {
@@ -563,8 +578,8 @@ fn download_mujoco(mujoco_version: &str) -> PathBuf {
         }
 
         // Extract.
-        #[cfg(target_os = "linux")]
-        extract_linux(&download_path);
+        #[cfg(unix)]
+        extract_unix(&download_path);
         #[cfg(target_os = "windows")]
         extract_windows(&download_path, &outdirname);
 
@@ -620,9 +635,9 @@ fn extract_windows(filename: &Path, outdirname: &Path) {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[cfg(feature = "auto-download-dynamic-mujoco")]
-fn extract_linux(filename: &Path) {
+fn extract_unix(filename: &Path) {
     let file = File::open(filename).unwrap_or_else(
         |err| panic!("failed to open '{}' ({err})", filename.display())
     );
