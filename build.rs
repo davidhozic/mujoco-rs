@@ -272,7 +272,7 @@ fn main() {
         'auto-download-dynamic-mujoco' for dynamic linking."
     );
 
-    // Use cargo's target host instead of env, for cross-compilation purposes.
+    // Use cargo's target host instead of env!(), for cross-compilation purposes.
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
 
     // Verify feature selection before compilation.
