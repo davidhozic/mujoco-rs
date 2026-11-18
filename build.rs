@@ -412,12 +412,12 @@ fn main() {
                     // We don't support macOS here due to the complexity of MuJoCo's packaging for macOS.
                     // Feel free to submit a PR if you believe this can be universally implemented easily.
                     target_os = "macos" => compile_error!("automatic downloads are not supported on macOS"),
-                    _ => download_mujoco_dynamic(mujoco_version)
+                    _ => download_mujoco_dynamic(mujoco_version, HOST_OS)
                 }}
 
                 // Download the un-official build of the statically linked library.
                 feature = "auto-download-static-mujoco" => {
-                    todo!()
+                    download_mujoco_static(mujoco_version, HOST_OS)
                 }
 
                 _ => {
@@ -446,8 +446,8 @@ fn main() {
 /// Downloads the official MuJoCo dynamically linked library.
 #[cfg(not(target_os = "macos"))]
 #[cfg(feature = "auto-download-dynamic-mujoco")]
-fn download_mujoco_dynamic(version: &str) -> PathBuf {
-    const MUJOCO_BASE_DYNAMIC_DOWNLOAD_LINK: &str = "https://github.com/google-deepmind/mujoco/releases/download";
+fn download_mujoco_dynamic(version: &str, host_os: &str) -> PathBuf {
+    const MUJOCO_DOWNLOAD_LINK: &str = "https://github.com/google-deepmind/mujoco/releases/download";
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| {
         panic!(
             "unable to obtain the ARCHITECTURE information -- please manually download \
@@ -455,11 +455,14 @@ fn download_mujoco_dynamic(version: &str) -> PathBuf {
             (and potentially add the path to LD_LIBRARY_PATH)"
         )
     });
-    let filename = cfg_select!{
-        target_os = "linux" => format!("mujoco-{version}-linux-{target_arch}.tar.gz"),
-        target_os = "windows" => format!("mujoco-{version}-windows-{target_arch}.zip"),
-    };
-    let download_url = format!("{MUJOCO_BASE_DYNAMIC_DOWNLOAD_LINK}/{version}/{filename}");
+    let filename = format!(
+        "mujoco-{version}-{host_os}-{target_arch}.{}",
+        cfg_select! {
+            unix => "tar.gz",
+            _ => "zip"
+        }
+    );
+    let download_url = format!("{MUJOCO_DOWNLOAD_LINK}/{version}/{filename}");
     let hash_verifier = |name: &str| {
         match name {
             "mujoco-3.17.0-linux-aarch64.tar.gz" => Some("55467a37b74e7d943899768aee820e6754a66811ae5ffa17d2768f0c40fc983a"),
@@ -477,11 +480,49 @@ fn download_mujoco_dynamic(version: &str) -> PathBuf {
     download_mujoco(version, download_url, hash_verifier)
 }
 
+/// Downloads the unofficial MuJoCo staticically linked library.
+#[cfg(feature = "auto-download-static-mujoco")]
+fn download_mujoco_static(version: &str, host_os: &str) -> PathBuf {
+    const MUJOCO_DOWNLOAD_LINK: &str = "https://github.com/davidhozic/mujoco-fork/releases/download";
+    let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| {
+        panic!(
+            "unable to obtain the ARCHITECTURE information -- please manually download \
+            MuJoCo and specify {MUJOCO_STATIC_LIB_PATH_VAR}."
+        )
+    });
+    let filename = format!(
+        "mujoco-unofficial-{version}-static-{host_os}-{target_arch}.{}",
+        cfg_select! {
+            unix => "tar.gz",
+            _ => "zip"
+        }
+    );
+    let download_url = format!("{MUJOCO_DOWNLOAD_LINK}/{version}-static/{filename}");
+    let hash_verifier = |name: &str| {
+        match name {
+            "mujoco-unofficial-3.17.0-static-linux-aarch64.tar.gz" => Some("aeda53639d987c16296d079de841858288ad07c7499e3c1e9c02d5972e5616fa"),
+            "mujoco-unofficial-3.17.0-static-linux-x86_64.tar.gz" => Some("7aa207ffaf76ca11f05f7ee4917e4c6d5a80b0579e4ce79b77693958779757a5"),
+            "mujoco-unofficial-3.17.0-static-macos-aarch64.tar.gz" => Some("dd1c3e8267db2af0cf0b86d2cf8958aeaa17e0e516f59da0859335d119ec6e9d"),
+            "mujoco-unofficial-3.17.0-static-macos-x86_64.tar.gz" => Some("00969cc0ab418b9650b13b0ef4e4489168a77cacfde43bb4ed9aea8e14250af3"),
+            "mujoco-unofficial-3.17.0-static-windows-aarch64.zip" => Some("dbfb79532172bfbc2ac2ef62147a36cd99a4c5aa2cac761375ee43d0c8ade1ee"),
+            "mujoco-unofficial-3.17.0-static-windows-x86_64.zip" => Some("0bfcc508194d27ee3a3fd3d60385ea4bb8ebeda0143bca52e1e4f8c73b9a3192"),
+            _ => {
+                println!(
+                    "cargo::warning=Skipping hash verification for '{name}' due to missed match case. \
+                    Please report (to MuJoCo-rs GitHub issues) a bug for a missing configuration."
+                );
+                None
+            }
+        }
+    };
+    download_mujoco(version, download_url, hash_verifier)
+}
+
 /// Downloads MuJoCo of version `mujoco_version` from `download_url`.
 /// For security reasons, `hash_verifier` is used to verify the hash of the downloaded archive based on the
 /// pre-defined hash inside this build script.
 /// Linux and Windows, same-OS builds only.
-#[cfg(feature = "auto-download-dynamic-mujoco")]
+#[cfg(any(feature = "auto-download-dynamic-mujoco", feature = "auto-download-static-mujoco"))]
 fn download_mujoco(
     mujoco_version: &str,
     download_url: String,
@@ -574,7 +615,7 @@ fn download_mujoco(
 }
 
 #[cfg(target_os = "windows")]
-#[cfg(feature = "auto-download-dynamic-mujoco")]
+#[cfg(any(feature = "auto-download-dynamic-mujoco", feature = "auto-download-static-mujoco"))]
 fn extract_windows(filename: &Path, outdirname: &Path) {
     let file = File::open(filename).unwrap_or_else(|err|
         panic!("failed to open archive '{}' ({err}).", filename.display())
@@ -616,7 +657,7 @@ fn extract_windows(filename: &Path, outdirname: &Path) {
 }
 
 #[cfg(unix)]
-#[cfg(feature = "auto-download-dynamic-mujoco")]
+#[cfg(any(feature = "auto-download-dynamic-mujoco", feature = "auto-download-static-mujoco"))]
 fn extract_unix(filename: &Path) {
     let file = File::open(filename).unwrap_or_else(
         |err| panic!("failed to open '{}' ({err})", filename.display())
