@@ -270,6 +270,10 @@ fn main() {
         'auto-download-dynamic-mujoco' for dynamic linking."
     );
 
+    // Incompatible features
+    #[cfg(all(feature = "auto-download-dynamic-mujoco", feature = "auto-download-static-mujoco"))]
+    compile_error!("cannot have both dynamic and static MuJoCo library downloads enabled, pick one!");
+
     // Use cargo's target host instead of env!(), for cross-compilation purposes.
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
 
@@ -445,6 +449,7 @@ fn link_static(target_os: &str) {
     println!("cargo::rustc-link-lib=static=tinyxml2");
     println!("cargo::rustc-link-lib=static=qhullstatic_r");
     println!("cargo::rustc-link-lib=static=ccd");
+    println!("cargo::rustc-link-lib=static=miniz");
 
     if target_os == "linux" {
         println!("cargo::rustc-link-lib=stdc++");
@@ -488,7 +493,7 @@ fn download_mujoco_dynamic(version: &str, host_os: &str) -> PathBuf {
         }
     };
     link_dynamic();
-    download_mujoco(version, download_url, hash_verifier)
+    download_mujoco(version, download_url, hash_verifier, "")
 }
 
 /// Downloads the unofficial MuJoCo staticically linked library.
@@ -528,7 +533,7 @@ fn download_mujoco_static(version: &str, host_os: &str) -> PathBuf {
     };
 
     link_static(host_os);
-    download_mujoco(version, download_url, hash_verifier)
+    download_mujoco(version, download_url, hash_verifier, "-static")
 }
 
 /// Downloads MuJoCo of version `mujoco_version` from `download_url`.
@@ -539,7 +544,8 @@ fn download_mujoco_static(version: &str, host_os: &str) -> PathBuf {
 fn download_mujoco(
     mujoco_version: &str,
     download_url: String,
-    hash_verifier: fn(&str) -> Option<&'static str>
+    hash_verifier: fn(&str) -> Option<&'static str>,
+    extracted_suffix: &str,
 ) -> PathBuf {
     use std::io::{BufReader, Read};
     use sha2::Digest;
@@ -564,7 +570,7 @@ fn download_mujoco(
         )
     }
 
-    let outdirname = download_dir.join(format!("mujoco-{mujoco_version}"));
+    let outdirname = download_dir.join(format!("mujoco-{mujoco_version}{extracted_suffix}"));
     let libdir_path = outdirname.join("lib");
     if !libdir_path.exists() {
         // Download the archive.
