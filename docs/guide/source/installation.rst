@@ -127,11 +127,12 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
 
     .. tab:: Automatic download
 
-        To make MuJoCo-rs automatically download MuJoCo, enable MuJoCo-rs's Cargo feature ``auto-download-mujoco``:
+        To make MuJoCo-rs automatically download MuJoCo, enable MuJoCo-rs's Cargo feature
+        ``auto-download-dynamic-mujoco``:
 
         ::
 
-            cargo add mujoco-rs --features "auto-download-mujoco"
+            cargo add mujoco-rs --features "auto-download-dynamic-mujoco"
 
         Then, set the environment variable ``MUJOCO_DOWNLOAD_DIR`` to the **absolute path**
         into which the MuJoCo library will be extracted. Note that a subdirectory will

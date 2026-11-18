@@ -20,12 +20,12 @@
 |---|---|
 | `MUJOCO_DYNAMIC_LINK_DIR` | Absolute path to MuJoCo's `lib/` for dynamic linking (compile-time) |
 | `MUJOCO_STATIC_LINK_DIR` | Absolute path to MuJoCo's `lib/` for static linking |
-| `MUJOCO_DOWNLOAD_DIR` | Where the `auto-download-mujoco` feature extracts MuJoCo |
+| `MUJOCO_DOWNLOAD_DIR` | Where the `auto-download-dynamic-mujoco` feature extracts MuJoCo |
 | `LD_LIBRARY_PATH` | Runtime library search path (Linux) |
 
 All linking env vars must be absolute paths (`realpath`). Set **both** `MUJOCO_DYNAMIC_LINK_DIR`
 (compile time, read by `build.rs`) and `LD_LIBRARY_PATH` (runtime); the `/test`, `/build`, and
-`/run-example` workflows already set both. With `auto-download-mujoco`, a set
+`/run-example` workflows already set both. With `auto-download-dynamic-mujoco`, a set
 `MUJOCO_DYNAMIC_LINK_DIR` takes precedence over the downloaded copy.
 
 ## Common pitfalls
@@ -66,7 +66,9 @@ All linking env vars must be absolute paths (`realpath`). Set **both** `MUJOCO_D
 1. Update the `+mj-X.Y.Z` suffix in `Cargo.toml` `[package].version`.
 2. Download and extract the new MuJoCo release into `mujoco-X.Y.Z/` at the repo root.
 3. Update `build.rs` if the linking strategy or expected paths changed.
-4. Regenerate FFI bindings with the `ffi-regenerate` feature (developer only; agents must NOT).
-5. Review the MuJoCo release notes; update wrappers accordingly.
-6. Update `changelog.rst` and `migration.rst`.
-7. Run the full test suite, `/doc`, and spot-check examples.
+4. Update the archive names and the SHA-256 literals in `download_mujoco` (`build.rs`) to the
+   official hashes of the new release.
+5. Regenerate FFI bindings with the `ffi-regenerate` feature (developer only; agents must NOT).
+6. Review the MuJoCo release notes; update wrappers accordingly.
+7. Update `changelog.rst` and `migration.rst`.
+8. Run the full test suite, `/doc`, and spot-check examples.

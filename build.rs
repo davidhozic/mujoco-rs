@@ -509,7 +509,7 @@ fn download_mujoco(mujoco_version: &str) -> PathBuf {
     let outdirname = download_dir.join(format!("mujoco-{mujoco_version}"));
     let libdir_path = outdirname.join("lib");
     if !libdir_path.exists() {
-        let download_path = download_dir.join(download_url.rsplit_once("/").unwrap().1);
+        let download_path = download_dir.join(&download_file_name);
 
         // Download the archive.
         let mut response = ureq::get(&download_url).call().expect("failed to download MuJoCo");

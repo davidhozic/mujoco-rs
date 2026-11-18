@@ -68,7 +68,7 @@
 //!     when the video driver supports it. On Windows and macOS, this feature must always be
 //!     enabled when the `renderer` feature is enabled.
 //!
-//! - `auto-download-mujoco`: MuJoCo dependency will be automatically downloaded to the specified path.
+//! - `auto-download-dynamic-mujoco`: MuJoCo dependency will be automatically downloaded to the specified path.
 //!
 //!   - This is only available on Linux and Windows.
 //!   - The environment variable `MUJOCO_DOWNLOAD_DIR` must be set to the absolute path of the download location.
