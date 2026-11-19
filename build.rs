@@ -537,9 +537,9 @@ fn download_mujoco_dynamic(version: &str, host_os: &str) -> PathBuf {
 fn download_mujoco_static(version: &str, host_os: &str) -> PathBuf {
     const MUJOCO_DOWNLOAD_LINK: &str = "https://github.com/davidhozic/mujoco-fork/releases/download";
 
-    // Download either into the env-set path or into the temporary directory of the OS.
+    // Download either into the env-set path or into target/ out directory.
     let download_path = get_download_path_from_env()
-        .unwrap_or_else(|| std::env::temp_dir());
+        .unwrap_or_else(|| env::var("OUT_DIR").unwrap().into());
 
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| {
         panic!(
