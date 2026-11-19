@@ -560,12 +560,12 @@ fn download_mujoco_static(version: &str, host_os: &str) -> PathBuf {
     let download_url_mujoco = format!("{MUJOCO_DOWNLOAD_LINK}/{version}-static/{filename_mujoco}");
     let hash_verifier_mujoco = |name: &str| {
         match name {
-            "mujoco-unofficial-3.17.0-static-linux-aarch64.tar.gz" => Some("5976e8fd463d801c9b8eaed88021422abc43362c40fc109fc84483aab603f200"),
-            "mujoco-unofficial-3.17.0-static-linux-x86_64.tar.gz" => Some("2415826a4ac0d2eebd346ee362ffd9f51bba8da35b56e3c4631879d44d9c833c"),
-            "mujoco-unofficial-3.17.0-static-macos-aarch64.tar.gz" => Some("93265fb3636b1c454ced5496af41484b552eb30ab42aececa362711ae81df6f3"),
-            "mujoco-unofficial-3.17.0-static-macos-x86_64.tar.gz" => Some("994f129d2c0faae16d0346eedbc006e7f881c11bd45027505b793372b082cf52"),
-            "mujoco-unofficial-3.17.0-static-windows-aarch64.zip" => Some("f45a3a91db549975fe57841cdd26a28ad700e2b9fa0865a94895a7d9ab610ad3"),
-            "mujoco-unofficial-3.17.0-static-windows-x86_64.zip" => Some("ebce06851454416bac3414ae5fa680ec32796e6304ba09875a5c3bcb1ca8c912"),
+            "mujoco-unofficial-3.17.0-static-linux-aarch64.tar.gz" => Some("5d3ea323dc0f9d521834c35a444534c8f9ef40956dced88bdd37c569cde45bcc"),
+            "mujoco-unofficial-3.17.0-static-linux-x86_64.tar.gz" => Some("d932991f03c3d539f8ec22c50ac374d406896f12ea46d57a7d1c93a4254460ad"),
+            "mujoco-unofficial-3.17.0-static-macos-aarch64.tar.gz" => Some("9d8865eeb09589fc508451e562373ae42950fc6935c01badcb13afb75a8637be"),
+            "mujoco-unofficial-3.17.0-static-macos-x86_64.tar.gz" => Some("100575ec6d8a9ba7ddf4c34b0110ad3f4799fbcd63bf911e0f36a2133c486555"),
+            "mujoco-unofficial-3.17.0-static-windows-aarch64.zip" => Some("3a021fc746acd07c83012fc5f6fbfdb138791c2738998da71fdd7054b3034c09"),
+            "mujoco-unofficial-3.17.0-static-windows-x86_64.zip" => Some("6da8bccc9ad21a8dc18be2b76fbe8d78f42bb576d6ce9d9237a73f882727e365"),
             _ => {
                 println!(
                     "cargo::warning=Skipping hash verification for '{name}' due to missed match case. \
@@ -583,12 +583,12 @@ fn download_mujoco_static(version: &str, host_os: &str) -> PathBuf {
         let download_url_simulate = format!("{MUJOCO_DOWNLOAD_LINK}/{version}-static/{filename_simulate}");
         let hash_verifier_simulate = |name: &str| {
             match name {
-                "simulate-unofficial-3.17.0-static-linux-aarch64.tar.gz" => Some("f4005495ae28990785ce42d9db446b7c48c370d873397700450f2a3d6014bcff"),
-                "simulate-unofficial-3.17.0-static-linux-x86_64.tar.gz" => Some("6968a26e83de5beb2e1294ca209855fbb94bf3ceef26176f1b21d5d275a934e6"),
-                "simulate-unofficial-3.17.0-static-macos-aarch64.tar.gz" => Some("6214b1d93a5405d83eec41831751d273700366ea9c65da79e1f63f5a05515d93"),
-                "simulate-unofficial-3.17.0-static-macos-x86_64.tar.gz" => Some("9724712b773f20108515991baf30f491f89f05eafc8ae0490d826146d8b12514"),
-                "simulate-unofficial-3.17.0-static-windows-aarch64.zip" => Some("12679b6c2b5724f02d40295e0f73ac37101a322ad547c74bc388b9d567f75f3a"),
-                "simulate-unofficial-3.17.0-static-windows-x86_64.zip" => Some("084eed4cdf4f307070fb4394e355703e0e9f718f6c9a0279c3b726f3c4bfe456"),
+                "simulate-unofficial-3.17.0-static-linux-aarch64.tar.gz" => Some("bf5df60efaff942acedf86608b7fddb62a1cea094ea1f1c3d706953fd03aea8f"),
+                "simulate-unofficial-3.17.0-static-linux-x86_64.tar.gz" => Some("242e42f5ba51c772e8d3a3ab481ffb5f71ed6339cf5c1dc8b9773e2c34afc6b6"),
+                "simulate-unofficial-3.17.0-static-macos-aarch64.tar.gz" => Some("0177c8adffb69d25df0e7b35aacb4b5445ae00b1f6a76b50b3be1f798fd0647c"),
+                "simulate-unofficial-3.17.0-static-macos-x86_64.tar.gz" => Some("f4995bca78a5e2dc164e221ff4d9af20d34226871a4d05e9061741fca8495d6b"),
+                "simulate-unofficial-3.17.0-static-windows-aarch64.zip" => Some("2323d208e434c7dd421e9f10be0d74745e074d925330583709aecf5578612ce8"),
+                "simulate-unofficial-3.17.0-static-windows-x86_64.zip" => Some("7cb44b76c1221da3f57d303e5d53ec57db2ee30e670f8bcb9e4f228a0f845dbc"),
                 _ => {
                     println!(
                         "cargo::warning=Skipping hash verification for '{name}' due to missed match case. \
