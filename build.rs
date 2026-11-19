@@ -318,6 +318,10 @@ fn main() {
 
         println!("cargo::rerun-if-changed={}", path_lib_file.display());
         link_static(&target_os);
+        // C++ runtime is not embedded in regular static builds. Only the MuJoCo-rs-pre-built ones do.
+        if target_os == "linux" {
+            println!("cargo::rustc-link-lib=stdc++");
+        }
         path_lib_dir
     }
 
@@ -451,9 +455,7 @@ fn link_static(target_os: &str) {
     println!("cargo::rustc-link-lib=static=ccd");
     println!("cargo::rustc-link-lib=static=miniz");
 
-    if target_os == "linux" {
-        println!("cargo::rustc-link-lib=stdc++");
-    } else if target_os == "macos" {
+    if target_os == "macos" {
         println!("cargo::rustc-link-lib=c++");
     }
 }
