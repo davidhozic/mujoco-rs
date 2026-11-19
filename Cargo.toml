@@ -44,7 +44,7 @@ exclude = [
 ]
 
 [package.metadata.docs.rs]
-all-features = true
+features = ["viewer-ui", "renderer-winit-fallback", "cpp-viewer"]
 
 [[example]]
 name = "basic"
