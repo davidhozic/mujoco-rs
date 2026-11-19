@@ -449,11 +449,12 @@ fn link_static(target_os: &str) {
         println!("cargo::rustc-link-lib=static=glfw3");
     }
 
-    println!("cargo::rustc-link-lib=static=mujoco");
-    println!("cargo::rustc-link-lib=static=tinyxml2");
-    println!("cargo::rustc-link-lib=static=qhullstatic_r");
-    println!("cargo::rustc-link-lib=static=ccd");
-    println!("cargo::rustc-link-lib=static=miniz");
+    println!("cargo::rustc-link-lib=static:+whole-archive=mujoco");  // whole-archive ensures mjz decoders are bundled.
+    // Don't bundle to prevent duplications of symbols.
+    println!("cargo::rustc-link-lib=static:-bundle=tinyxml2");
+    println!("cargo::rustc-link-lib=static:-bundle=qhullstatic_r");
+    println!("cargo::rustc-link-lib=static:-bundle=ccd");
+    println!("cargo::rustc-link-lib=static:-bundle=miniz");
 
     if target_os == "macos" {
         println!("cargo::rustc-link-lib=c++");
@@ -462,6 +463,7 @@ fn link_static(target_os: &str) {
 
 /// Returns the path to the download directory, based on the environmental
 /// variable (see [`MUJOCO_DOWNLOAD_PATH_VAR`]), or [`None`] if the path is not configured.
+#[cfg(any(feature = "auto-download-dynamic-mujoco", feature = "auto-download-static-mujoco"))]
 fn get_download_path_from_env() -> Option<PathBuf> {
     let download_path = PathBuf::from(std::env::var(MUJOCO_DOWNLOAD_PATH_VAR).ok()?);
     if download_path.is_relative() {
