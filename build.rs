@@ -458,6 +458,21 @@ fn link_static(target_os: &str) {
     }
 }
 
+/// Returns the path to the download directory, based on the environmental
+/// variable (see [`MUJOCO_DOWNLOAD_PATH_VAR`]), or [`None`] if the path is not configured.
+fn get_download_path_from_env() -> Option<PathBuf> {
+    let download_path = PathBuf::from(std::env::var(MUJOCO_DOWNLOAD_PATH_VAR).ok()?);
+    if download_path.is_relative() {
+        panic!(
+            "{MUJOCO_DOWNLOAD_PATH_VAR} must be an absolute path to the location \
+            where MuJoCo will be downloaded and extracted (was given '{}').",
+            download_path.display()
+        )
+    }
+
+    Some(download_path)
+}
+
 /// Downloads the official MuJoCo dynamically linked library.
 #[cfg(not(target_os = "macos"))]
 #[cfg(feature = "auto-download-dynamic-mujoco")]
@@ -470,6 +485,7 @@ fn download_mujoco_dynamic(version: &str, host_os: &str) -> PathBuf {
             (and potentially add the path to LD_LIBRARY_PATH)"
         )
     });
+
     let filename = format!(
         "mujoco-{version}-{host_os}-{target_arch}.{}",
         cfg_select! {
@@ -492,14 +508,37 @@ fn download_mujoco_dynamic(version: &str, host_os: &str) -> PathBuf {
             }
         }
     };
+
+    // Dynamically linked-libraries do not get saved into temporary directories due to linking and distribution reasons.
+    // In any case, there is no reason to do that as we have statically linked builds available for this.
+    let download_path = get_download_path_from_env()
+        .unwrap_or_else(||
+    {
+        let os_example = cfg_select! {
+                unix => format!("e.g., export {MUJOCO_DOWNLOAD_PATH_VAR}=\"$(realpath .)\""),
+                target_os = "windows" => format!("e.g., $env:{MUJOCO_DOWNLOAD_PATH_VAR}=\"/full/absolute/path/\"")
+            };
+
+            panic!(
+                "when Cargo feature 'auto-download-dynamic-mujoco' or auto-download-static-mujoco is enabled, \
+                {MUJOCO_DOWNLOAD_PATH_VAR} must be set to an absolute path where MuJoCo \
+                will be extracted --- {os_example}",
+            );
+    });
+
     link_dynamic();
-    download_mujoco(version, download_url, hash_verifier, "", ".mujoco")
+    download_mujoco(version, download_url, &download_path, hash_verifier, "", ".mujoco")
 }
 
 /// Downloads the unofficial MuJoCo staticically linked library.
 #[cfg(feature = "auto-download-static-mujoco")]
 fn download_mujoco_static(version: &str, host_os: &str) -> PathBuf {
     const MUJOCO_DOWNLOAD_LINK: &str = "https://github.com/davidhozic/mujoco-fork/releases/download";
+
+    // Download either into the env-set path or into the temporary directory of the OS.
+    let download_path = get_download_path_from_env()
+        .unwrap_or_else(|| std::env::temp_dir());
+
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| {
         panic!(
             "unable to obtain the ARCHITECTURE information -- please manually download \
@@ -534,6 +573,7 @@ fn download_mujoco_static(version: &str, host_os: &str) -> PathBuf {
             }
         }
     };
+
     link_static(host_os);
     #[cfg(feature = "cpp-viewer")]  // Also download libsimulate dependency
     {
@@ -556,9 +596,10 @@ fn download_mujoco_static(version: &str, host_os: &str) -> PathBuf {
                 }
             }
         };
-        download_mujoco(version, download_url_simulate, hash_verifier_simulate, "-static", ".simulate");
+        download_mujoco(version, download_url_simulate, &download_path, hash_verifier_simulate, "-static", ".simulate");
     }
-    download_mujoco(version, download_url_mujoco, hash_verifier_mujoco, "-static", ".mujoco")
+
+    download_mujoco(version, download_url_mujoco, &download_path, hash_verifier_mujoco, "-static", ".mujoco")
 }
 
 /// Downloads MuJoCo of version `mujoco_version` from `download_url`.
@@ -569,34 +610,15 @@ fn download_mujoco_static(version: &str, host_os: &str) -> PathBuf {
 fn download_mujoco(
     mujoco_version: &str,
     download_url: String,
+    download_path: &Path,
     hash_verifier: fn(&str) -> Option<&'static str>,
     extracted_suffix: &str,
     touchfile_name: &str,
 ) -> PathBuf {
     use std::io::{BufReader, Read};
     use sha2::Digest;
-    let download_dir = PathBuf::from(std::env::var(MUJOCO_DOWNLOAD_PATH_VAR).unwrap_or_else(|_| {
-        let os_example = cfg_select! {
-            unix => format!("e.g., export {MUJOCO_DOWNLOAD_PATH_VAR}=\"$(realpath .)\""),
-            target_os = "windows" => format!("e.g., $env:{MUJOCO_DOWNLOAD_PATH_VAR}=\"/full/absolute/path/\"")
-        };
 
-        panic!(
-            "when Cargo feature 'auto-download-dynamic-mujoco' or auto-download-static-mujoco is enabled, \
-            {MUJOCO_DOWNLOAD_PATH_VAR} must be set to an absolute path where MuJoCo \
-            will be extracted --- {os_example}",
-        );
-    }));
-
-    if download_dir.is_relative() {
-        panic!(
-            "{MUJOCO_DOWNLOAD_PATH_VAR} must be an absolute path to the location \
-            where MuJoCo will be downloaded and extracted (was given '{}').",
-            download_dir.display()
-        )
-    }
-
-    let outdirname = download_dir.join(format!("mujoco-{mujoco_version}{extracted_suffix}"));
+    let outdirname = download_path.join(format!("mujoco-{mujoco_version}{extracted_suffix}"));
     let libdir_path = outdirname.join("lib");
     let touchfile_path = outdirname.join(touchfile_name);
     if !touchfile_path.exists() {
@@ -605,7 +627,7 @@ fn download_mujoco(
         let mut body_reader = response.body_mut().as_reader();
 
         let download_file_name = download_url.rsplit_once("/").unwrap().1;
-        let download_path = download_dir.join(&download_file_name);
+        let download_path = download_path.join(&download_file_name);
         std::fs::create_dir_all(download_path.parent().unwrap()).unwrap_or_else(
             |err| panic!("failed to create parent directory of '{}' ({err})", download_path.display())
         );
