@@ -18,7 +18,9 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         features: [
           ["renderer", "renderer-winit-fallback", "auto-download-dynamic-mujoco"],
-          ["auto-download-dynamic-mujoco"]
+          ["renderer", "renderer-winit-fallback", "auto-download-static-mujoco"],
+          # Without the features. We assume static behaves the same due to passing above features configuration
+          ["auto-download-dynamic-mujoco"],
         ]
       fail-fast: false
 
@@ -80,14 +82,14 @@ jobs:
         run: cargo build --release --lib --features ${{env.MJRS_FEATURES}} --no-default-features
 
       - name: Setup LD_LIBRARY_PATH on Linux
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && contains(matrix.features, 'auto-download-dynamic-mujoco')
         run: |
           MUJOCO_DIR=$(ls | grep '^mujoco-' | head -n1)
           echo "LD_LIBRARY_PATH=$PWD/$MUJOCO_DIR/lib/:$LD_LIBRARY_PATH" >> $GITHUB_ENV
         shell: bash
 
       - name: Copy mujoco.dll on Windows
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && contains(matrix.features, 'auto-download-dynamic-mujoco')
         run: |
           MUJOCO_DIR=$(ls | grep '^mujoco-' | head -n1)
           cp $PWD/$MUJOCO_DIR/bin/mujoco.dll .
@@ -106,6 +108,8 @@ jobs:
         run: cargo test --doc --features ${{env.MJRS_FEATURES}} --no-default-features
 
       - name: cargo test (model compatibility)
+        # Only the official dynamic library contains headers. 
+        if: contains(matrix.features, 'auto-download-dynamic-mujoco')
         run: cargo test --test model_compatibility --features ${{env.MJRS_FEATURES}} --no-default-features
 
       - name: Run a rendering test
