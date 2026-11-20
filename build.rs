@@ -445,11 +445,11 @@ fn link_dynamic() {
 fn link_static(target_os: &str) {
     #[cfg(feature = "cpp-viewer")]
     {
-        println!("cargo::rustc-link-lib=static=simulate");
-        println!("cargo::rustc-link-lib=static=glfw3");
+        println!("cargo::rustc-link-lib=static:-bundle=simulate");
+        println!("cargo::rustc-link-lib=static:-bundle=glfw3");
     }
 
-    println!("cargo::rustc-link-lib=static:+whole-archive=mujoco");  // whole-archive ensures mjz decoders are bundled.
+    println!("cargo::rustc-link-lib=static:+whole-archive,-bundle=mujoco");  // whole-archive ensures mjz decoders are bundled.
     // Don't bundle to prevent duplications of symbols.
     println!("cargo::rustc-link-lib=static:-bundle=tinyxml2");
     println!("cargo::rustc-link-lib=static:-bundle=qhullstatic_r");
