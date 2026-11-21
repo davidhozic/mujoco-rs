@@ -664,7 +664,7 @@ fn download_mujoco(
         let mut body_reader = response.body_mut().as_reader();
 
         let download_file_name = download_url.rsplit_once("/").unwrap().1;
-        let download_path = download_path.join(&download_file_name);
+        let download_path = download_path.join(download_file_name);
         let mut file = File::create(&download_path).unwrap_or_else(
             |err| panic!("could not save archive '{}' ({err})", download_path.display())
         );
