@@ -1089,9 +1089,9 @@ mod test {
         renderer.render().unwrap();
 
         let tmp = std::env::temp_dir();
-        let path_none = tmp.join("mujoco_rs_test_none.png");
-        let path_fast = tmp.join("mujoco_rs_test_fast.png");
-        let path_high = tmp.join("mujoco_rs_test_high.png");
+        let path_none = tmp.join(crate::util::testing::unique_path("mujoco_rs_test_none.png"));
+        let path_fast = tmp.join(crate::util::testing::unique_path("mujoco_rs_test_fast.png"));
+        let path_high = tmp.join(crate::util::testing::unique_path("mujoco_rs_test_high.png"));
 
         renderer.save_rgb(&path_none).unwrap();
         renderer.set_png_compression(png::Compression::Fast);

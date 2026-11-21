@@ -3221,13 +3221,13 @@ mod tests {
 
     #[test]
     fn test_parse_xml_file() {
-        const PATH: &str = "./mj_spec_test_parse_xml_file.xml";
-        let mut file = fs::File::create(PATH).expect("file creation failed");
+        let path = crate::util::testing::unique_path("mj_spec_test_parse_xml_file.xml");
+        let mut file = fs::File::create(&path).expect("file creation failed");
         file.write_all(MODEL.as_bytes()).expect("unable to write to file");
         file.flush().unwrap();
 
-        let spec = MjSpec::from_xml(PATH);
-        fs::remove_file(PATH).expect("file removal failed");
+        let spec = MjSpec::from_xml(&path);
+        fs::remove_file(&path).expect("file removal failed");
         assert!(spec.is_ok(), "failed to parse the model");
     }
 
@@ -3332,14 +3332,14 @@ mod tests {
 
     #[test]
     fn test_encode_xml() {
-        const PATH_XML: &str = "mj_spec_test_encode_xml.xml";
+        let path_xml = crate::util::testing::unique_path("mj_spec_test_encode_xml.xml");
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
         let model = spec.compile().expect("could not compile the model");
 
-        spec.encode(PATH_XML, "text/xml").expect("XML encoding failed");
-        let mut spec_xml = MjSpec::from_xml(PATH_XML).expect("XML parsing failed");
-        std::fs::remove_file(PATH_XML).unwrap();
+        spec.encode(&path_xml, "text/xml").expect("XML encoding failed");
+        let mut spec_xml = MjSpec::from_xml(&path_xml).expect("XML parsing failed");
+        std::fs::remove_file(&path_xml).unwrap();
         assert!(model.is_compatible_with_model(&spec_xml.compile().unwrap()));
 
         assert!(matches!(spec.encode("mj_spec_test_encode_xml.txt", ""), Err(MjEditError::SaveFailed(_))));
@@ -3348,27 +3348,27 @@ mod tests {
 
     #[test]
     fn test_encode_mjz_vfs() {
-        const PATH_MJZ: &str = "mj_spec_test_encode_mjz_vfs.mjz";
-        const PATH_MJZ_NO_ASSETS: &str = "mj_spec_test_encode_mjz_no_assets.mjz";
+        let path_mjz = crate::util::testing::unique_path("mj_spec_test_encode_mjz_vfs.mjz");
+        let path_mjz_no_assets = crate::util::testing::unique_path("mj_spec_test_encode_mjz_no_assets.mjz");
 
         let (mut spec, vfs) = heightfield_spec_and_vfs();
         let model = spec.compile_with_vfs(&vfs).expect("compilation with vfs failed");
 
         // The heightfield, located in the VFS, is written into the ZIP alongside the model. 
-        spec.encode_with_vfs(PATH_MJZ, "application/zip", &vfs).expect("MJZ encoding failed");
+        spec.encode_with_vfs(&path_mjz, "application/zip", &vfs).expect("MJZ encoding failed");
         // The heightfield, located in the VFS, is skipped from being written into the ZIP.
         // Only the model is stored.
-        spec.encode(PATH_MJZ_NO_ASSETS, "application/zip").expect("MJZ encoding failed");
+        spec.encode(&path_mjz_no_assets, "application/zip").expect("MJZ encoding failed");
 
 
         let vfs_mjz = MjVfs::new();
         let vfs_no_assets = MjVfs::new();
 
         // Assets that were stored in the ZIP get written into the VFS.
-        let mut spec_mjz = MjSpec::from_parse_vfs(PATH_MJZ, "application/zip", &vfs_mjz)
+        let mut spec_mjz = MjSpec::from_parse_vfs(&path_mjz, "application/zip", &vfs_mjz)
             .expect("MJZ parsing failed");
         // No assets are part of the zip. MjSpec loads only the model, without any assets added to the VFS.
-        let mut spec_no_assets = MjSpec::from_parse_vfs(PATH_MJZ_NO_ASSETS, "application/zip", &vfs_no_assets)
+        let mut spec_no_assets = MjSpec::from_parse_vfs(&path_mjz_no_assets, "application/zip", &vfs_no_assets)
             .expect("MJZ parsing failed");
 
         // Read both from their VFS. Only the first has the heightfield in the VFS.
@@ -3380,8 +3380,8 @@ mod tests {
 
         drop(vfs_mjz);  // Allow files to be removed on Windows.
         drop(vfs_no_assets);
-        std::fs::remove_file(PATH_MJZ).unwrap();
-        std::fs::remove_file(PATH_MJZ_NO_ASSETS).unwrap();
+        std::fs::remove_file(&path_mjz).unwrap();
+        std::fs::remove_file(&path_mjz_no_assets).unwrap();
     }
 
     #[test]
@@ -3972,9 +3972,10 @@ mod tests {
     /// Tests wrapper method of [`mj_parse`] without VFS.
     #[test]
     fn test_parse_file() {
-        std::fs::write("test_parse_vfs.xml", MODEL).unwrap();
-        let mut spec = MjSpec::from_parse("test_parse_vfs.xml", "XML").unwrap();
-        std::fs::remove_file("test_parse_vfs.xml").unwrap();
+        let path = crate::util::testing::unique_path("test_parse_vfs.xml");
+        std::fs::write(&path, MODEL).unwrap();
+        let mut spec = MjSpec::from_parse(&path, "XML").unwrap();
+        std::fs::remove_file(&path).unwrap();
         let model = spec.compile().unwrap();
         assert!(model.geom("floor1").is_some());
     }
@@ -4319,13 +4320,13 @@ mod tests {
     /// Parsing via XML file must produce a model with the expected properties.
     #[test]
     fn test_parse_xml_file_content() {
-        const PATH: &str = "./mj_spec_test_parse_xml_file_content.xml";
-        let mut file = fs::File::create(PATH).expect("file creation failed");
+        let path = crate::util::testing::unique_path("mj_spec_test_parse_xml_file_content.xml");
+        let mut file = fs::File::create(&path).expect("file creation failed");
         file.write_all(MODEL.as_bytes()).expect("unable to write");
         file.flush().unwrap();
 
-        let result = MjSpec::from_xml(PATH);
-        fs::remove_file(PATH).expect("file removal failed");
+        let result = MjSpec::from_xml(&path);
+        fs::remove_file(&path).expect("file removal failed");
 
         let mut spec = result.expect("file parse failed");
         let model = spec.compile().expect("compile failed");
@@ -4338,21 +4339,21 @@ mod tests {
     /// `from_parse` accepts `PathBuf` and `&Path` in addition to `&str`.
     #[test]
     fn test_from_parse_path_types() {
-        const PATH: &str = "./mj_spec_test_from_parse_path_types.xml";
-        let mut file = fs::File::create(PATH).expect("file creation failed");
+        let path = crate::util::testing::unique_path("mj_spec_test_from_parse_path_types.xml");
+        let mut file = fs::File::create(&path).expect("file creation failed");
         file.write_all(MODEL.as_bytes()).expect("write failed");
         file.flush().unwrap();
 
         // &str
-        assert!(MjSpec::from_parse(PATH, "").is_ok());
+        assert!(MjSpec::from_parse(&path, "").is_ok());
         // String
-        assert!(MjSpec::from_parse(String::from(PATH), "").is_ok());
+        assert!(MjSpec::from_parse(String::from(&path), "").is_ok());
         // &Path
-        assert!(MjSpec::from_parse(Path::new(PATH), "").is_ok());
+        assert!(MjSpec::from_parse(Path::new(&path), "").is_ok());
         // PathBuf
-        assert!(MjSpec::from_parse(PathBuf::from(PATH), "").is_ok());
+        assert!(MjSpec::from_parse(PathBuf::from(&path), "").is_ok());
 
-        fs::remove_file(PATH).expect("file removal failed");
+        fs::remove_file(&path).expect("file removal failed");
     }
 
     /// `from_parse_vfs` accepts `PathBuf` and `&Path`.
@@ -4378,9 +4379,9 @@ mod tests {
         spec.compile().unwrap();
 
         let paths: [PathBuf; 3] = [
-            PathBuf::from("./mj_spec_save_xml_str.xml"),
-            PathBuf::from("./mj_spec_save_xml_pathbuf.xml"),
-            PathBuf::from("./mj_spec_save_xml_path.xml"),
+            PathBuf::from(crate::util::testing::unique_path("mj_spec_save_xml_str.xml")),
+            PathBuf::from(crate::util::testing::unique_path("mj_spec_save_xml_pathbuf.xml")),
+            PathBuf::from(crate::util::testing::unique_path("mj_spec_save_xml_path.xml")),
         ];
 
         // &str
