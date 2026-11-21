@@ -224,14 +224,12 @@ regex = {version = "1.13.1", optional = true}
 # Automatic download dependencies
 ureq = {version = "3.4.0", optional = true}
 sha2 = {version = "0.11.0", optional = true}
-
-[target.'cfg(unix)'.build-dependencies]
 flate2 = {version = "1.1.9", optional = true}
 tar = {version = "0.4.46", optional = true}
-pkg-config = "0.3"
-
-[target.'cfg(target_os = "windows")'.build-dependencies]
 zip = {version = "8.6.0", default-features = false, features = ["deflate"], optional = true}
+
+[target.'cfg(unix)'.build-dependencies]
+pkg-config = "0.3"
 
 [dev-dependencies]
 env_logger = { version = "0.11.11", default-features = false }
