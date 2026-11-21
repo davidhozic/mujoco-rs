@@ -582,14 +582,14 @@ fn download_mujoco_static(version: &str, target_os: &str) -> PathBuf {
     let download_url_mujoco = format!("{MUJOCO_DOWNLOAD_LINK}/unofficial-{version}-static/{filename_mujoco}");
     let hash_verifier_mujoco = |name: &str| {
         match name {
-            "mujoco-unofficial-3.17.0-static-linux-aarch64-crt-dynamic.tar.gz" => Some("d00848231a297b38f8e80ee597640c55c671e37b2e697a11521981a0cc7ae26e"),
-            "mujoco-unofficial-3.17.0-static-linux-x86_64-crt-dynamic.tar.gz" => Some("da71b3d6c081e447e429e7955098378af56d91ed100637499e1dd5a54dbb7abd"),
-            "mujoco-unofficial-3.17.0-static-macos-aarch64-crt-dynamic.tar.gz" => Some("ddb2e812001308c199af4ef005dcda646d3dc789bb72f35ffa82b6b91269493d"),
-            "mujoco-unofficial-3.17.0-static-macos-x86_64-crt-dynamic.tar.gz" => Some("dfb6ad12bbacce4e782eeb8ee3e775d570e827beee58dfba507d9880a3c0e3f2"),
-            "mujoco-unofficial-3.17.0-static-windows-aarch64-crt-dynamic.zip" => Some("fe10b45ef3f43f0e47d6382393e4695815130334931cd5b038028acb28c68ee7"),
-            "mujoco-unofficial-3.17.0-static-windows-aarch64-crt-static.zip" => Some("fa9995461729b62f91aadbe2eb381d1ff5d03e943a132e8ca5f35dab25b0c2f5"),
-            "mujoco-unofficial-3.17.0-static-windows-x86_64-crt-dynamic.zip" => Some("63fc6b1a5fcc4b6b7ea6346e94a34b4134dd493e4f41a39f8c1cff6894c49e59"),
-            "mujoco-unofficial-3.17.0-static-windows-x86_64-crt-static.zip" => Some("93bdfc0bbb0ca6594e24e8312e79239bafa4d458e26ad30cc8e46b74a918032b"),
+            "mujoco-unofficial-3.17.0-static-linux-aarch64-crt-dynamic.tar.gz" => Some("481eeb359042dffe5417cdade701482b80fa38f6767bc49e6a2906264fa70cf0"),
+            "mujoco-unofficial-3.17.0-static-linux-x86_64-crt-dynamic.tar.gz" => Some("f9b816afa9dd8c88dcd16b96a01a0d062b5ab39aef6f245a6270f424ecb67dbd"),
+            "mujoco-unofficial-3.17.0-static-macos-aarch64-crt-dynamic.tar.gz" => Some("d8e01937fe9fff1c97a091168fcbd9029af927c27f5d39b099f314d9753dc768"),
+            "mujoco-unofficial-3.17.0-static-macos-x86_64-crt-dynamic.tar.gz" => Some("c687452c97cee6096a93b8adf19e8a869e4d96763d345bf362d51cfe525c4da8"),
+            "mujoco-unofficial-3.17.0-static-windows-aarch64-crt-dynamic.zip" => Some("50633ef5459aa21309c80e1679ffe0c29b708467df64011750f905a4944f0fd2"),
+            "mujoco-unofficial-3.17.0-static-windows-aarch64-crt-static.zip" => Some("17308b7bfd4d7ca69e780b2b8b22297be7529c3a35971e40deeda67b9242708b"),
+            "mujoco-unofficial-3.17.0-static-windows-x86_64-crt-dynamic.zip" => Some("78b50de6a84ebe3cd5176820e6fae6d08f50c44ff96670ab3fe03ddbf6bfabd5"),
+            "mujoco-unofficial-3.17.0-static-windows-x86_64-crt-static.zip" => Some("763f6dcacdf904c30c577806c8cfa1fd9025c7c711bc56dea75474ef257b65b5"),
             _ => {
                 println!(
                     "cargo::warning=Skipping hash verification for '{name}' due to missed match case. \
@@ -607,14 +607,14 @@ fn download_mujoco_static(version: &str, target_os: &str) -> PathBuf {
         let download_url_simulate = format!("{MUJOCO_DOWNLOAD_LINK}/unofficial-{version}-static/{filename_simulate}");
         let hash_verifier_simulate = |name: &str| {
             match name {
-                "simulate-unofficial-3.17.0-static-linux-aarch64-crt-dynamic.tar.gz" => Some("4961a787751b3038b819de93f273e5f9356181f00fd8a57e5a23254b215e3c06"),
-                "simulate-unofficial-3.17.0-static-linux-x86_64-crt-dynamic.tar.gz" => Some("40746eeeea6689899aac8d552f47f88f6a83c98c9794bb5100f6e552564530b5"),
-                "simulate-unofficial-3.17.0-static-macos-aarch64-crt-dynamic.tar.gz" => Some("e51a4cca2df100d4401c83524e0f3ee8b83b59c60af485d6650d6309f96004c2"),
-                "simulate-unofficial-3.17.0-static-macos-x86_64-crt-dynamic.tar.gz" => Some("095ec0a0c7ac62b94e9bfd499941237934343323f4369cd5fb230548513c6f48"),
-                "simulate-unofficial-3.17.0-static-windows-aarch64-crt-dynamic.zip" => Some("56b5ac4b84067e559b934e9161da0cd566017b4b347a2fb8739d44efc8f67ebd"),
-                "simulate-unofficial-3.17.0-static-windows-aarch64-crt-static.zip" => Some("a816456450b5c3e093592abe33a260422d9f8eba2b769fb8ccb0883bafb41642"),
-                "simulate-unofficial-3.17.0-static-windows-x86_64-crt-dynamic.zip" => Some("095e754bbd2b7e1d9beeb9981e7a787867802e567c1d149ae92105d4aa14292e"),
-                "simulate-unofficial-3.17.0-static-windows-x86_64-crt-static.zip" => Some("f450969d1ee7243e2f90520e7126c208f633a8542914f7fd3e88f11b149bd8ff"),
+                "simulate-unofficial-3.17.0-static-linux-aarch64-crt-dynamic.tar.gz" => Some("452a5f9a3e43483ebbdb3b7d37f9c71b4b1d0cc8a78cb9fb96455a5eb97d08d6"),
+                "simulate-unofficial-3.17.0-static-linux-x86_64-crt-dynamic.tar.gz" => Some("03140a6205bd4154186549084ca15b736be22559e33ec1e6e77b3f586eef2e8c"),
+                "simulate-unofficial-3.17.0-static-macos-aarch64-crt-dynamic.tar.gz" => Some("194d92164bfb6da0761ccfef84a7dc2b936ced210300bf8403e7f9ddec7bdd76"),
+                "simulate-unofficial-3.17.0-static-macos-x86_64-crt-dynamic.tar.gz" => Some("bbf97afb047ce47da3b1b9dd051415d4e7aaf0608e9fe9328e62d3c40d94d435"),
+                "simulate-unofficial-3.17.0-static-windows-aarch64-crt-dynamic.zip" => Some("60fc5cb17f7d9783bfb452add4e87154eed221fa2ee214d0269200ec6455dddf"),
+                "simulate-unofficial-3.17.0-static-windows-aarch64-crt-static.zip" => Some("58a0097d4968d30165217cb8c067f73fadf5bf6dedc9828c519cabea6b22a050"),
+                "simulate-unofficial-3.17.0-static-windows-x86_64-crt-dynamic.zip" => Some("67859e2bf0ff07e3d2ce86594fac4ecce92ab88e6c08515bb22dd185dc138631"),
+                "simulate-unofficial-3.17.0-static-windows-x86_64-crt-static.zip" => Some("b497a704076d2aeb7f378472f9bd6991ceb596c4de9b9255c701fb811fff8d5f"),
                 _ => {
                     println!(
                         "cargo::warning=Skipping hash verification for '{name}' due to missed match case. \
