@@ -449,22 +449,23 @@ fn link_dynamic() {
 fn link_static(target_os: &str) {
     #[cfg(feature = "cpp-viewer")]
     {
-        println!("cargo::rustc-link-lib=static:-bundle=simulate");
-        println!("cargo::rustc-link-lib=static:-bundle=glfw3");
+        // The fork's libsimulate has GLFW embedded inside.
+        println!("cargo::rustc-link-lib=static=simulate");
         // Frameworks that GLFW and simulate use
         if target_os == "macos" {
             for framework in ["Cocoa", "IOKit", "CoreFoundation", "CoreVideo", "OpenGL"] {
                 println!("cargo::rustc-link-lib=framework={framework}");
             }
         }
+        else if target_os == "windows" {
+            for lib in ["user32", "gdi32", "shell32"] {
+                println!("cargo::rustc-link-lib=dylib={lib}");
+            }
+        }
     }
 
-    println!("cargo::rustc-link-lib=static:+whole-archive,-bundle=mujoco");  // whole-archive ensures mjz decoders are bundled.
-    // Don't bundle to prevent duplications of symbols.
-    println!("cargo::rustc-link-lib=static:-bundle=tinyxml2");
-    println!("cargo::rustc-link-lib=static:-bundle=qhullstatic_r");
-    println!("cargo::rustc-link-lib=static:-bundle=ccd");
-    println!("cargo::rustc-link-lib=static:-bundle=miniz");
+    // whole-archive ensures mjz decoders are bundled.
+    println!("cargo::rustc-link-lib=static:+whole-archive=mujoco");
 
     if target_os == "macos" {
         println!("cargo::rustc-link-lib=c++");
