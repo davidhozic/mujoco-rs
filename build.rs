@@ -255,6 +255,8 @@ mod build_dependencies {
 const MUJOCO_STATIC_LIB_PATH_VAR: &str = "MUJOCO_STATIC_LINK_DIR";
 const MUJOCO_DYN_LIB_PATH_VAR: &str = "MUJOCO_DYNAMIC_LINK_DIR";
 const MUJOCO_DOWNLOAD_PATH_VAR: &str = "MUJOCO_DOWNLOAD_DIR";
+/// File in a static `lib/` directory whose presence means the archives embed the C++ runtime.
+const EMBEDDED_CXX_MARKER: &str = ".embedded-cxx-runtime";
 
 fn main() {
     // Setup everything.
@@ -319,7 +321,8 @@ fn main() {
         println!("cargo::rerun-if-changed={}", path_lib_file.display());
         link_static(&target_os);
         // C++ runtime is not embedded in regular static builds.
-        if target_os == "linux" {
+        // Do skip linking if we have a marker that tells us the CXX library is embedded.
+        if target_os == "linux" && !path_lib_dir.join(EMBEDDED_CXX_MARKER).exists() {
             println!("cargo::rustc-link-lib=stdc++");
         }
         path_lib_dir
