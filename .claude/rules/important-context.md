@@ -20,12 +20,12 @@
 |---|---|
 | `MUJOCO_DYNAMIC_LINK_DIR` | Absolute path to MuJoCo's `lib/` for dynamic linking (compile-time) |
 | `MUJOCO_STATIC_LINK_DIR` | Absolute path to MuJoCo's `lib/` for static linking |
-| `MUJOCO_DOWNLOAD_DIR` | Where the `auto-download-dynamic-mujoco` feature extracts MuJoCo |
+| `MUJOCO_DOWNLOAD_DIR` | Where the `download-dynamic-mujoco` feature extracts MuJoCo |
 | `LD_LIBRARY_PATH` | Runtime library search path (Linux) |
 
 All linking env vars must be absolute paths (`realpath`). Set **both** `MUJOCO_DYNAMIC_LINK_DIR`
 (compile time, read by `build.rs`) and `LD_LIBRARY_PATH` (runtime); the `/test`, `/build`, and
-`/run-example` workflows already set both. With `auto-download-dynamic-mujoco`, a set
+`/run-example` workflows already set both. With `download-dynamic-mujoco`, a set
 `MUJOCO_DYNAMIC_LINK_DIR` takes precedence over the downloaded copy.
 
 ## Common pitfalls

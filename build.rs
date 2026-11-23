@@ -269,11 +269,11 @@ fn main() {
     #[cfg(feature = "auto-download-mujoco")]
     println!(
         "cargo::warning=Cargo feature 'auto-download-mujoco' has been replaced with \
-        'auto-download-dynamic-mujoco' for dynamic linking."
+        'download-dynamic-mujoco' for dynamic linking."
     );
 
     // Incompatible features
-    #[cfg(all(feature = "auto-download-dynamic-mujoco", feature = "auto-download-static-mujoco"))]
+    #[cfg(all(feature = "download-dynamic-mujoco", feature = "download-static-mujoco"))]
     compile_error!("cannot have both dynamic and static MuJoCo library downloads enabled, pick one!");
 
     // Use cargo's target host instead of env!(), for cross-compilation purposes.
@@ -361,7 +361,7 @@ fn main() {
     /* pkg-config / auto-download fallback */
     else {
         #[cfg_attr(
-            all(windows, not(any(feature = "auto-download-static-mujoco", feature = "auto-download-dynamic-mujoco"))),
+            all(windows, not(any(feature = "download-static-mujoco", feature = "download-dynamic-mujoco"))),
             expect(unused_variables, reason = "only pkg-config and the downloads use the version")
         )]
         let mujoco_version = env!("CARGO_PKG_VERSION").split_once("mj-").unwrap().1;
@@ -376,7 +376,7 @@ fn main() {
 
         // Only supported for static downloads. Dynamic linking (ang pkg-config) would need to
         // have the exact system libraries available.
-        if HOST_OS != target_os && cfg!(not(feature = "auto-download-static-mujoco")) {
+        if HOST_OS != target_os && cfg!(not(feature = "download-static-mujoco")) {
             panic!(
                 "cross-compiling for '{target_os}' from '{HOST_OS}' requires \
                 {MUJOCO_STATIC_LIB_PATH_VAR} or {MUJOCO_DYN_LIB_PATH_VAR} to be set"
@@ -385,7 +385,7 @@ fn main() {
 
         cfg_select! {
             // Un-official build of the statically linked library.
-            feature = "auto-download-static-mujoco" => download_mujoco_static(mujoco_version, &target_os),
+            feature = "download-static-mujoco" => download_mujoco_static(mujoco_version, &target_os),
 
             // ---- Same-OS builds only below this point ----
             // TODO in future: make pkg-config an explicit Cargo feature.
@@ -411,7 +411,7 @@ fn main() {
                 }.unwrap_or_else(||  // pkg-config did not find library or we are on Windows
                     cfg_select! {
                         // Download the official build of the dynamically linked library.
-                        feature = "auto-download-dynamic-mujoco" => {cfg_select! {
+                        feature = "download-dynamic-mujoco" => {cfg_select! {
                             // We don't support macOS here due to the complexity of MuJoCo's packaging for macOS.
                             // Feel free to submit a PR if you believe this can be universally implemented easily.
                             target_os = "macos" => compile_error!("automatic downloads are not supported on macOS"),
@@ -423,8 +423,8 @@ fn main() {
                                 "Unable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} \
                                 nor {MUJOCO_DYN_LIB_PATH_VAR} is set.\
                                 \nConsider enabling automatic download:\n\
-                                \t- Dynamic linking (official):  cargo add mujoco-rs --features \"auto-download-dynamic-mujoco\"\n\
-                                \t- Static linking (unofficial): cargo add mujoco-rs --features \"auto-download-static-mujoco\""
+                                \t- Dynamic linking (official):  cargo add mujoco-rs --features \"download-dynamic-mujoco\"\n\
+                                \t- Static linking (unofficial): cargo add mujoco-rs --features \"download-static-mujoco\""
                             )
                         }
                     }
@@ -477,7 +477,7 @@ fn link_static(target_os: &str) {
 
 /// Returns the path to the download directory, based on the environmental
 /// variable (see [`MUJOCO_DOWNLOAD_PATH_VAR`]), or [`None`] if the path is not configured.
-#[cfg(any(feature = "auto-download-dynamic-mujoco", feature = "auto-download-static-mujoco"))]
+#[cfg(any(feature = "download-dynamic-mujoco", feature = "download-static-mujoco"))]
 fn get_download_path_from_env() -> Option<PathBuf> {
     let download_path = PathBuf::from(std::env::var(MUJOCO_DOWNLOAD_PATH_VAR).ok()?);
     if download_path.is_relative() {
@@ -493,7 +493,7 @@ fn get_download_path_from_env() -> Option<PathBuf> {
 
 /// Downloads the official MuJoCo dynamically linked library.
 #[cfg(not(target_os = "macos"))]
-#[cfg(feature = "auto-download-dynamic-mujoco")]
+#[cfg(feature = "download-dynamic-mujoco")]
 fn download_mujoco_dynamic(version: &str, host_os: &str) -> PathBuf {
     const MUJOCO_DOWNLOAD_LINK: &str = "https://github.com/google-deepmind/mujoco/releases/download";
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| {
@@ -538,7 +538,7 @@ fn download_mujoco_dynamic(version: &str, host_os: &str) -> PathBuf {
             };
 
             panic!(
-                "when Cargo feature 'auto-download-dynamic-mujoco' or auto-download-static-mujoco is enabled, \
+                "when Cargo feature 'download-dynamic-mujoco' or download-static-mujoco is enabled, \
                 {MUJOCO_DOWNLOAD_PATH_VAR} must be set to an absolute path where MuJoCo \
                 will be extracted --- {os_example}",
             );
@@ -549,7 +549,7 @@ fn download_mujoco_dynamic(version: &str, host_os: &str) -> PathBuf {
 }
 
 /// Downloads the unofficial MuJoCo staticically linked library.
-#[cfg(feature = "auto-download-static-mujoco")]
+#[cfg(feature = "download-static-mujoco")]
 fn download_mujoco_static(version: &str, target_os: &str) -> PathBuf {
     const MUJOCO_DOWNLOAD_LINK: &str = "https://github.com/davidhozic/mujoco-fork/releases/download";
 
@@ -633,7 +633,7 @@ fn download_mujoco_static(version: &str, target_os: &str) -> PathBuf {
 /// Downloads MuJoCo of version `mujoco_version` from `download_url`.
 /// For security reasons, `hash_verifier` is used to verify the hash of the downloaded archive based on the
 /// pre-defined hash inside this build script.
-#[cfg(any(feature = "auto-download-dynamic-mujoco", feature = "auto-download-static-mujoco"))]
+#[cfg(any(feature = "download-dynamic-mujoco", feature = "download-static-mujoco"))]
 fn download_mujoco(
     mujoco_version: &str,
     download_url: String,
@@ -721,7 +721,7 @@ fn download_mujoco(
     libdir_path
 }
 
-#[cfg(any(feature = "auto-download-dynamic-mujoco", feature = "auto-download-static-mujoco"))]
+#[cfg(any(feature = "download-dynamic-mujoco", feature = "download-static-mujoco"))]
 fn extract_zip(filename: &Path, outdirname: &Path) {
     let file = File::open(filename).unwrap_or_else(|err|
         panic!("failed to open archive '{}' ({err}).", filename.display())
@@ -762,7 +762,7 @@ fn extract_zip(filename: &Path, outdirname: &Path) {
     }
 }
 
-#[cfg(any(feature = "auto-download-dynamic-mujoco", feature = "auto-download-static-mujoco"))]
+#[cfg(any(feature = "download-dynamic-mujoco", feature = "download-static-mujoco"))]
 fn extract_tar_gz(filename: &Path) {
     let file = File::open(filename).unwrap_or_else(
         |err| panic!("failed to open '{}' ({err})", filename.display())

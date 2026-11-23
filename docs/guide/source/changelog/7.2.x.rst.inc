@@ -6,7 +6,7 @@
 *Deprecated Cargo features*
 
 - To support both dynamic and static linking, ``auto-download-mujoco`` is deprecated in favor of
-  ``auto-download-dynamic-mujoco``.
+  ``download-dynamic-mujoco``.
 
 .. rubric:: Other changes
 

@@ -65,7 +65,7 @@ WORKDIR /mujoco/
 #     -DCMAKE_CXX_COMPILER:STRING=clang++-13 \
 #     -DMUJOCO_HARDEN:BOOL=ON
 # -----------------------------------------
-# cmake --build build --parallel --target glfw libmujoco_simulate --config=Release
+# cmake --build build --parallel --target libmujoco_simulate --config=Release
 # -----------------------------------------
 # export MUJOCO_STATIC_LINK_DIR=$(realpath mujoco/build/lib/)
 # cargo run ...
