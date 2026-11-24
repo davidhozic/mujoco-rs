@@ -279,7 +279,62 @@ automatically downloaded by MuJoCo-rs, on certain platforms.
 
     .. tab:: Automatic download
 
-        .. todo:: Write
+        While Google Deepmind's MuJoCo team maintains the official dynamically linked release binaries,
+        we (MuJoCo-rs authors) maintain unofficial statically linkable builds, uploaded at the
+        `releases page <https://github.com/davidhozic/mujoco-fork/releases/tag/unofficial-3.17.0-static>`__
+        of our `unofficial MuJoCo fork <mj_fork_>`__. Specifically, we build for the following platforms:
+
+        .. list-table::
+            :header-rows: 1
+
+            * - Operating System / Architecture
+              - x86_64
+              - aarch64
+            * - Linux
+              - |checkmark|
+              - |checkmark|
+            * - Windows
+              - |checkmark|
+              - |checkmark|
+            * - macOS
+              - |checkmark|
+              - |checkmark|
+
+        On **Windows**, each platform has two builds: one for the dynamic C runtime (CRT) and one for
+        the static CRT. MuJoCo-rs downloads the static CRT build when the ``crt-static`` target
+        feature is enabled (i.e., ``RUSTFLAGS="-C target-feature=+crt-static"``).
+        On **Linux** and **macOS**, the CRT is selected when the final binary is linked, thus the
+        single prebuilt MuJoCo library (archive) supports both the dynamic and the static CRT.
+
+        These are the details for individual build:
+
+        .. list-table::
+            :header-rows: 1
+
+            * - Operating System
+              - Compiler
+              - Linker
+              - Link-time optimization
+              - Notes
+
+            * - Linux
+              - Clang 15.0.7 (Ubuntu 22.04)
+              - LLD 15
+              - |checkmark|
+              - - Requires glibc 2.32 or newer
+                - Embeds the C++ runtime (``libstdc++``)
+            * - Windows
+              - MSVC 19.44.35230 (Visual Studio 2022, toolset v143)
+              - Requires MSVC ``link.exe`` 14.44 or newer (Visual Studio 2022 17.14 or newer)
+              -
+              - Uses the dynamic (``/MD``) or the static (``/MT``) CRT, depending on the build
+            * - macOS
+              - Clang 17 (Homebrew ``llvm@17``)
+              - Apple ``ld`` 955.13
+              - |checkmark|
+              - - Requires macOS 11.0 or newer (deployment target)
+                - Uses the system C++ runtime (``libc++``)
+
 
     .. tab:: Manual build and linking
 

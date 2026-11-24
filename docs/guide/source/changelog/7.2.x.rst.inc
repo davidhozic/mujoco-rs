@@ -14,3 +14,5 @@
 
 - The hash of MuJoCo's downloaded archive is now pre-written inside the build script,
   instead of being downloaded from the server.
+- Added downloading support for **pre-build statically linkable** libraries
+  enabled via the ``download-static-mujoco`` Cargo feature.
