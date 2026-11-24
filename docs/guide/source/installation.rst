@@ -109,7 +109,7 @@ automatic download of dynamic MuJoCo library.
 .. note::
 
     Cross-OS builds (for example a Windows target from a Linux host) support neither the
-    pkg-config nor automatic download of the dynamically linked library
+    pkg-config nor automatic download of the dynamically linked library.
     Such a build fails unless ``MUJOCO_DYNAMIC_LINK_DIR`` or ``MUJOCO_STATIC_LINK_DIR`` points to a MuJoCo
     build for the target. Cross-compilation within the same OS (for example Linux x86_64 to
     Linux aarch64) and automatic downloads of statically linked library are not affected.
@@ -281,7 +281,7 @@ to support testing of MuJoCo-rs.
 
 .. [#cpp_simulate_viewer_fn] This requires the Cargo feature ``cpp-viewer``.
 
-Static binaries can either be compiler by users, using CMake, in the fork, or
+Static binaries can either be compiled by users, using CMake, in the fork, or
 automatically downloaded by MuJoCo-rs, on certain platforms.
 
 .. tabs:: 
@@ -312,8 +312,16 @@ automatically downloaded by MuJoCo-rs, on certain platforms.
         On **Windows**, each platform has two builds: one for the dynamic C runtime (CRT) and one for
         the static CRT. MuJoCo-rs downloads the static CRT build when the ``crt-static`` target
         feature is enabled (i.e., ``RUSTFLAGS="-C target-feature=+crt-static"``).
-        On **Linux** and **macOS**, the CRT is selected when the final binary is linked, thus the
+        On **Linux**, the CRT is selected when the final binary is linked, thus the
         single prebuilt MuJoCo library (archive) supports both the dynamic and the static CRT.
+        On **macOS**, only the dynamic CRT exists.
+
+        The environment variable ``MUJOCO_DOWNLOAD_DIR`` optionally sets the **absolute path**
+        of the download location (by default, this is the build-script's output directory inside ``target/``).
+        MuJoCo is extracted into its ``<os>-<arch>/mujoco-x.y.z-static/`` subdirectory
+        (``mujoco-x.y.z-static-crt-static/`` for the Windows static CRT build).
+        The ``download-static-mujoco`` and ``download-dynamic-mujoco`` features cannot be
+        enabled together.
 
         These are the details for individual build:
 
@@ -330,7 +338,7 @@ automatically downloaded by MuJoCo-rs, on certain platforms.
               - Clang 15.0.7 (Ubuntu 22.04)
               - LLD 15
               - |checkmark|
-              - - Requires glibc 2.32 or newer
+              - - Requires glibc 2.33 or newer
                 - Embeds the C++ runtime (``libstdc++``)
             * - Windows
               - MSVC 19.44.35230 (Visual Studio 2022, toolset v143)
@@ -344,11 +352,10 @@ automatically downloaded by MuJoCo-rs, on certain platforms.
               - - Requires macOS 11.0 or newer (deployment target)
                 - Uses the system C++ runtime (``libc++``)
 
-        For **Windows**, as unmarked above, the library archives are built with link-time optimizations (LTO)
-        disabled. Enabling LTO on Windows provides no compatibility guarantees, thus requiring
-        linkage to be done to be done using the same MSVC toolchain that generated the MuJoCo
-        (or Simulate) library. If you wish to gain a slight performance boost, you'll need to
-        compile MuJoCo yourself. See the other static-linking tab for the latter.
+        For **Windows**, as the table shows, the library archives are built with link-time optimization (LTO)
+        disabled. With LTO enabled, only the same MSVC toolchain that built the MuJoCo
+        (or Simulate) library can link it. For the slight performance gain of LTO,
+        compile MuJoCo yourself, as the other static-linking tab describes.
 
     .. tab:: Manual build and linking
 
@@ -357,18 +364,26 @@ automatically downloaded by MuJoCo-rs, on certain platforms.
 
         ::
 
-            cmake -B build -S . -DBUILD_SHARED_LIBS:BOOL=OFF -DMUJOCO_HARDEN:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF -DMUJOCO_BUILD_TESTS:BOOL=OFF
+            cmake -B build -S . -DBUILD_SHARED_LIBS:BOOL=OFF -DMUJOCO_HARDEN:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -DMUJOCO_ENABLE_LTO:BOOL=OFF -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF -DMUJOCO_BUILD_TESTS:BOOL=OFF
             cmake --build build --parallel --target <TARGETS> --config=Release
 
         ``<TARGETS>`` can be, for example, ``mujoco`` to build the MuJoCo library. To build the C++ Simulate
         as a library (for use in MuJoCo-rs), target can be ``libmujoco_simulate``,
         which builds both MuJoCo and Simulate.
 
-        This was tested with the ``gcc`` compiler.
+        With **LTO disabled on Windows**, the default ``/EHsc`` flag causes a crash after a MuJoCo error.
+        On Windows (MSVC), thus also add ``-DCMAKE_CXX_FLAGS=/EHs``.
+
+        This was tested with the ``gcc`` compiler on Linux. GCC 16 stops the build with a
+        ``-Werror=stringop-truncation`` error. With such GCC version, also use/add
+        ``-DCMAKE_CXX_FLAGS=-Wno-stringop-truncation``.
 
         To actually build MuJoCo-rs, and make it link to the just built MuJoCo library, set the
         ``MUJOCO_STATIC_LINK_DIR`` environment variable to the **absolute** path of where the MuJoCo library lies.
-        For example, this is usually in ``mujoco/build/lib`` or ``mujoco/build/lib64``.
+        For example, this is usually in ``mujoco/build/lib`` or ``mujoco/build/lib64``
+        (``mujoco\build\lib\Release`` with Visual Studio generators).
+
+        MuJoCo-rs links the C++ runtime dynamically: ``libstdc++`` on Linux and ``libc++`` on macOS.
 
         .. tabs::
 
@@ -388,14 +403,14 @@ automatically downloaded by MuJoCo-rs, on certain platforms.
 
         .. rubric:: Performance and link-time optimization
 
-        Note that ``-DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF`` **disables link-time optimization**,
+        Note that ``-DMUJOCO_ENABLE_LTO:BOOL=OFF`` **disables link-time optimization**,
         thus resulting in slightly lower performance.
-        Enabling it causes compatibility problems on **the Linux platform**.
-        There should, however, be no problems on Windows and macOS, thus you should be able to safely
-        enable LTO on said platforms.
+        Enabling LTO causes compatibility problems on **the Linux platform**.
+        On Windows, the library must be linked with the same MSVC toolchain that built it.
+        There should be no problems on macOS.
 
         To obtain better performance by enabling link-time optimization, set
-        ``-DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON`` and tell Rust to link everything using the
+        ``-DMUJOCO_ENABLE_LTO:BOOL=ON`` and tell Rust to link everything using the
         OS system linker, as opposed to rust-lld:
 
         ::
@@ -411,7 +426,7 @@ automatically downloaded by MuJoCo-rs, on certain platforms.
 
         .. seealso::
 
-           See this `Dockerfile <https://github.com/davidhozic/mujoco-rs/blob/v7.1.x/Dockerfile.ubuntu>`_
+           See this `Dockerfile <https://github.com/davidhozic/mujoco-rs/blob/v7.2.x/Dockerfile.ubuntu>`_
            for a reproducible build environment which, to our knowledge, matches MuJoCo's official
            build environment.
            The Dockerfile includes commented-out commands for installing the Rust toolchain and
