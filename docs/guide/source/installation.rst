@@ -108,10 +108,10 @@ MuJoCo-rs uses the first available configuration, in this order: ``MUJOCO_STATIC
 .. note::
 
     Cross-OS builds (for example a Windows target from a Linux host) support neither the
-    automatic download nor pkg-config, because both give the host's binaries. Such a build
-    fails unless ``MUJOCO_DYNAMIC_LINK_DIR`` or ``MUJOCO_STATIC_LINK_DIR`` points to a MuJoCo
+    pkg-config nor automatic download of the dynamically linked library
+    Such a build fails unless ``MUJOCO_DYNAMIC_LINK_DIR`` or ``MUJOCO_STATIC_LINK_DIR`` points to a MuJoCo
     build for the target. Cross-compilation within the same OS (for example Linux x86_64 to
-    Linux aarch64) is not affected.
+    Linux aarch64) and automatic downloads of statically linked library are not affected.
 
 .. _pkg_config:
 

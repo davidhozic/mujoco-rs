@@ -73,13 +73,20 @@ Optional Cargo features can be enabled:
     when the video driver supports it. On Windows and macOS, this feature must always be
     enabled when the ``renderer`` feature is enabled.
 
-- ``download-dynamic-mujoco``: MuJoCo dependency will be automatically downloaded to the specified path.
+- ``download-dynamic-mujoco``: MuJoCo dependency will be automatically downloaded, as a dynamic library,
+  from the official MuJoCo repository.
 
   - This is only available on Linux and Windows.
   - The environment variable ``MUJOCO_DOWNLOAD_DIR`` must be set to the absolute path of the download location.
   - Downloaded MuJoCo library is still a shared library; see :ref:`mujoco_dep`
     for complete configuration details.
 
+- ``download-static-mujoco``: MuJoCo dependency will be automatically downloaded to the specified path,
+  as a static library, from an **unofficial** MuJoCo fork.
+
+  - This is only available on Linux, Windows and macOS.
+  - The environment variable ``MUJOCO_DOWNLOAD_DIR`` can be
+    set to the absolute path of the download location (if not given, it will be downloaded somewhere within the ``target/`` directory).
 
 By default, no optional features are enabled. Enable the features you need explicitly
 (e.g. ``cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"``).
