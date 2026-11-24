@@ -103,7 +103,8 @@ You have multiple ways of providing it:
 .. |checkmark| unicode:: U+2713
 
 MuJoCo-rs uses the first available configuration, in this order: ``MUJOCO_STATIC_LINK_DIR``,
-``MUJOCO_DYNAMIC_LINK_DIR``, pkg-config, automatic download.
+``MUJOCO_DYNAMIC_LINK_DIR``, automatic download of static MuJoCo library, pkg-config,
+automatic download of dynamic MuJoCo library.
 
 .. note::
 
@@ -124,6 +125,14 @@ for more info. The MuJoCo version that pkg-config reports must be exactly |MUJOC
 Depending on where the library is placed, you may still need to set up the dynamic loader
 environment variable, as described in :ref:`here <runtime_library_path>`.
 
+.. attention::
+
+    Currently, **pkg-config precedes the automatic download of the dynamically linked MuJoCo library** (described below).
+    This is an old behavior allowing to preserve backward compatibility. It will change in the next
+    major (by SemVer standards) release.
+
+    Automatic downloads of statically linked library, as well as manual linking of either
+    dynamic or static MuJoCo libraries, precede pkg-config. 
 
 .. _dynamic_linking:
 
@@ -335,6 +344,11 @@ automatically downloaded by MuJoCo-rs, on certain platforms.
               - - Requires macOS 11.0 or newer (deployment target)
                 - Uses the system C++ runtime (``libc++``)
 
+        For **Windows**, as unmarked above, the library archives are built with link-time optimizations (LTO)
+        disabled. Enabling LTO on Windows provides no compatibility guarantees, thus requiring
+        linkage to be done to be done using the same MSVC toolchain that generated the MuJoCo
+        (or Simulate) library. If you wish to gain a slight performance boost, you'll need to
+        compile MuJoCo yourself. See the other static-linking tab for the latter.
 
     .. tab:: Manual build and linking
 
