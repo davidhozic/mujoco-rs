@@ -374,7 +374,7 @@ fn main() {
             _ => compile_error!("unsupported host OS"),
         };
 
-        // Only supported for static downloads. Dynamic linking (ang pkg-config) would need to
+        // Only supported for static downloads. Dynamic linking (and pkg-config) would need to
         // have the exact system libraries available.
         if HOST_OS != target_os && cfg!(not(feature = "download-static-mujoco")) {
             panic!(
@@ -538,7 +538,7 @@ fn download_mujoco_dynamic(version: &str, host_os: &str) -> PathBuf {
             };
 
             panic!(
-                "when Cargo feature 'download-dynamic-mujoco' or download-static-mujoco is enabled, \
+                "when Cargo feature 'download-dynamic-mujoco' is enabled, \
                 {MUJOCO_DOWNLOAD_PATH_VAR} must be set to an absolute path where MuJoCo \
                 will be extracted --- {os_example}",
             );
@@ -548,7 +548,7 @@ fn download_mujoco_dynamic(version: &str, host_os: &str) -> PathBuf {
     download_mujoco(version, download_url, &download_path, hash_verifier, "", ".mujoco")
 }
 
-/// Downloads the unofficial MuJoCo staticically linked library.
+/// Downloads the unofficial MuJoCo statically linked library.
 #[cfg(feature = "download-static-mujoco")]
 fn download_mujoco_static(version: &str, target_os: &str) -> PathBuf {
     const MUJOCO_DOWNLOAD_LINK: &str = "https://github.com/davidhozic/mujoco-fork/releases/download";

@@ -127,7 +127,8 @@ environment variable, as described in :ref:`here <runtime_library_path>`.
 
 .. attention::
 
-    Currently, **pkg-config precedes the automatic download of the dynamically linked MuJoCo library** (described below).
+    Currently, **pkg-config precedes the automatic download of the dynamically linked MuJoCo library**
+    (described below).
     This is an old behavior allowing to preserve backward compatibility. It will change in the next
     major (by SemVer standards) release.
 
@@ -274,7 +275,7 @@ Static linking
 ~~~~~~~~~~~~~~~~~~
 **Official MuJoCo builds** include the precompiled MuJoCo library only in its **shared (dynamic) form**.
 
-To allow static linking, we maintain an actively synced `MuJoCo fork <https://github.com/davidhozic/mujoco-fork/tree/release/3.17.0-static>`__,
+To allow static linking, we maintain an actively synced `MuJoCo fork <mj_fork_>`__,
 which includes modifications to allow: static linking, wrapper around the C++ Simulate viewer [#cpp_simulate_viewer_fn]_
 (this is MuJoCo's official viewer, an alternative to our Rust viewer) and other smaller modifications
 to support testing of MuJoCo-rs.

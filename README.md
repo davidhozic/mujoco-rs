@@ -94,7 +94,7 @@ Optional Cargo features can be enabled:
     for information on complete configuration.
   - **Cross-OS downloads are not supported** (e.g. a Windows target from a Linux host).
 
-- ``download-static-mujoco``: MuJoCo dependency will be automatically downloaded to the specified path,
+- ``download-static-mujoco``: MuJoCo dependency will be automatically downloaded,
   as a static library, from an **unofficial** MuJoCo fork.
 
   - This is only available on Linux, Windows and macOS.

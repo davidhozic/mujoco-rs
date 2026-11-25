@@ -85,8 +85,8 @@ Optional Cargo features can be enabled:
   as a static library, from an **unofficial** MuJoCo fork.
 
   - This is only available on Linux, Windows and macOS.
-  - The environment variable ``MUJOCO_DOWNLOAD_DIR`` can be
-    set to the absolute path of the download location (if not given, it will be downloaded somewhere within the ``target/`` directory).
+  - The environment variable ``MUJOCO_DOWNLOAD_DIR`` can be set to the absolute path of the download
+    location (if not given, it will be downloaded somewhere within the ``target/`` directory).
 
 By default, no optional features are enabled. Enable the features you need explicitly
 (e.g. ``cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"``).
