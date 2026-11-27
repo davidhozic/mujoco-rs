@@ -85,12 +85,15 @@ Building the Rust crate
 
 Point ``MUJOCO_STATIC_LINK_DIR`` at the ``lib/`` directory and build with the
 Emscripten target.  ``EMCC_CFLAGS`` must match the flag used when building MuJoCo
-(see :ref:`wasm_building` for the explanation):
+(see :ref:`wasm_building` for the explanation).
+
 
 ::
 
-    EMCC_CFLAGS="-fwasm-exceptions" \
+    WASM_LINK_FLAGS="-C link-arg=-lccd -C link-arg=-lqhullstatic_r -C link-arg=-ltinyxml2 -C link-arg=-lminiz"
+    EMCC_CFLAGS="-fwasm-exceptions -sDEFAULT_TO_CXX" \
         MUJOCO_STATIC_LINK_DIR=$(realpath mujoco/build/wasm/lib) \
+        RUSTFLAGS="$WASM_LINK_FLAGS" \
         cargo build --example basic --target wasm32-unknown-emscripten
 
 Cargo produces two output artifacts inside
@@ -113,9 +116,9 @@ the process; this is not a Rust panic, so it cannot be caught.  Add
 
 ::
 
-    EMCC_CFLAGS="-fwasm-exceptions" \
+    EMCC_CFLAGS="-fwasm-exceptions -sDEFAULT_TO_CXX" \
         MUJOCO_STATIC_LINK_DIR=$(realpath mujoco/build/wasm/lib) \
-        RUSTFLAGS="-C link-arg=-sALLOW_MEMORY_GROWTH=1" \
+        RUSTFLAGS="$WASM_LINK_FLAGS -C link-arg=-sALLOW_MEMORY_GROWTH=1" \
         cargo build --example <your_example> --target wasm32-unknown-emscripten
 
 
