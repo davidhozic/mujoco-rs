@@ -2184,17 +2184,17 @@ mod tests {
 
     #[test]
     fn test_update_texture_from_by_reference() {
-        const PNG_PATH: &str = "_TMP_viewer_byref_texture.png";
-        std::fs::write(PNG_PATH, crate::util::testing::PNG_1X1).unwrap();
+        let png_path = crate::util::testing::unique_path("viewer_byref_texture.png");
+        std::fs::write(&png_path, crate::util::testing::PNG_1X1).unwrap();
 
         let mut spec = MjSpec::new();
         spec.add_texture()
-            .with_file(PNG_PATH)
+            .with_file(&png_path)
             .with_name("texture")
             .set_embed(MjtEmbed::mjEMBED_FALSE);
 
         let model = spec.compile();
-        std::fs::remove_file(PNG_PATH).unwrap();
+        std::fs::remove_file(&png_path).unwrap();
         let model = model.unwrap();
         assert_eq!(model.tex_adr()[0], -1);
 

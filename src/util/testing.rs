@@ -34,3 +34,8 @@ pub(crate) fn touch_slice_ends_mut<T: Clone>(slice: &mut [T]) {
         slice[index] = black_box(slice[index].clone());
     }
 }
+
+/// Returns the file name `name`, with ID of the test process included.
+pub(crate) fn unique_path(name: &str) -> String {
+    format!("__TMP_{}_{name}", std::process::id())
+}

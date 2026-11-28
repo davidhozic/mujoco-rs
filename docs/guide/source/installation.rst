@@ -6,6 +6,8 @@ Installation
 
 .. _mj_download: https://github.com/google-deepmind/mujoco/releases/tag/3.17.0
 
+.. _mj_fork: https://github.com/davidhozic/mujoco-fork/tree/release/3.17.0-static
+
 
 MuJoCo-rs
 ====================
@@ -86,23 +88,31 @@ You have multiple ways of providing it:
       - |checkmark|
       - |checkmark|
       - |checkmark|
-    * - :ref:`static_linking`
+
+    * - :ref:`static_linking`, automatic download (unofficial MuJoCo build)
       - |checkmark|
       - |checkmark|
       - |checkmark|
+
+    * - :ref:`static_linking`, manual build (unofficial MuJoCo build)
+      - |checkmark|
+      - |checkmark|
+      - |checkmark|
+
 
 .. |checkmark| unicode:: U+2713
 
 MuJoCo-rs uses the first available configuration, in this order: ``MUJOCO_STATIC_LINK_DIR``,
-``MUJOCO_DYNAMIC_LINK_DIR``, pkg-config, automatic download.
+``MUJOCO_DYNAMIC_LINK_DIR``, automatic download of static MuJoCo library, pkg-config,
+automatic download of dynamic MuJoCo library.
 
 .. note::
 
     Cross-OS builds (for example a Windows target from a Linux host) support neither the
-    automatic download nor pkg-config, because both give the host's binaries. Such a build
-    fails unless ``MUJOCO_DYNAMIC_LINK_DIR`` or ``MUJOCO_STATIC_LINK_DIR`` points to a MuJoCo
+    pkg-config nor automatic download of the dynamically linked library.
+    Such a build fails unless ``MUJOCO_DYNAMIC_LINK_DIR`` or ``MUJOCO_STATIC_LINK_DIR`` points to a MuJoCo
     build for the target. Cross-compilation within the same OS (for example Linux x86_64 to
-    Linux aarch64) is not affected.
+    Linux aarch64) and automatic downloads of statically linked library are not affected.
 
 .. _pkg_config:
 
@@ -115,6 +125,15 @@ for more info. The MuJoCo version that pkg-config reports must be exactly |MUJOC
 Depending on where the library is placed, you may still need to set up the dynamic loader
 environment variable, as described in :ref:`here <runtime_library_path>`.
 
+.. attention::
+
+    Currently, **pkg-config precedes the automatic download of the dynamically linked MuJoCo library**
+    (described below).
+    This is an old behavior allowing to preserve backward compatibility. It will change in the next
+    major (by SemVer standards) release.
+
+    Automatic downloads of statically linked library, as well as manual linking of either
+    dynamic or static MuJoCo libraries, precede pkg-config. 
 
 .. _dynamic_linking:
 
@@ -127,11 +146,12 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
 
     .. tab:: Automatic download
 
-        To make MuJoCo-rs automatically download MuJoCo, enable MuJoCo-rs's Cargo feature ``auto-download-mujoco``:
+        To make MuJoCo-rs automatically download MuJoCo, enable MuJoCo-rs's Cargo feature
+        ``download-dynamic-mujoco``:
 
         ::
 
-            cargo add mujoco-rs --features "auto-download-mujoco"
+            cargo add mujoco-rs --features "download-dynamic-mujoco"
 
         Then, set the environment variable ``MUJOCO_DOWNLOAD_DIR`` to the **absolute path**
         into which the MuJoCo library will be extracted. Note that a subdirectory will
@@ -254,81 +274,164 @@ You can fix these kinds of errors like so:
 Static linking
 ~~~~~~~~~~~~~~~~~~
 **Official MuJoCo builds** include the precompiled MuJoCo library only in its **shared (dynamic) form**.
-To statically link, you'll need to **compile** MuJoCo **yourself**.
-MuJoCo's build system doesn't (yet) support static linking, which is why
-we provide a modified MuJoCo repository with static linking support.
 
-While MuJoCo-rs already provides a :ref:`rust_native_viewer`, we understand that some projects wish
-to use the original C++ based 3D viewer (also named Simulate).
-To enable this, the modified MuJoCo repository also includes changes that support
-a safe interface between Rust and the C++ Simulate code. The C++ viewer is exposed through
-the ``cpp-viewer`` Cargo feature, which requires this static-linking setup.
+To allow static linking, we maintain an actively synced `MuJoCo fork <mj_fork_>`__,
+which includes modifications to allow: static linking, wrapper around the C++ Simulate viewer [#cpp_simulate_viewer_fn]_
+(this is MuJoCo's official viewer, an alternative to our Rust viewer) and other smaller modifications
+to support testing of MuJoCo-rs.
 
-To build statically linkable libraries, perform the following steps:
+.. [#cpp_simulate_viewer_fn] This requires the Cargo feature ``cpp-viewer``.
 
-1. Clone MuJoCo-rs's repository and check out the tag that matches the MuJoCo-rs version you use,
-2. Change your directory to the cloned repository,
-3. Run commands:
-   ::
+Static binaries can either be compiled by users, using CMake, in the fork, or
+automatically downloaded by MuJoCo-rs, on certain platforms.
 
-       git submodule update --init --recursive
-       cd ./mujoco/
-       cmake -B build -S . -DBUILD_SHARED_LIBS:BOOL=OFF -DMUJOCO_HARDEN:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF -DMUJOCO_BUILD_TESTS:BOOL=OFF
-       cmake --build build --parallel --target glfw libmujoco_simulate --config=Release
+.. tabs:: 
 
-   This was tested with the ``gcc`` compiler.
+    .. tab:: Automatic download
 
-   Note that ``-DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF`` **disables link-time optimization**, thus resulting in slightly
-   lower performance. Enabling it causes compatibility problems on the Linux platform. See the attention block below for more info.
+        While Google Deepmind's MuJoCo team maintains the official dynamically linked release binaries,
+        we (MuJoCo-rs authors) maintain unofficial statically linkable builds, uploaded at the
+        `releases page <https://github.com/davidhozic/mujoco-fork/releases/tag/unofficial-3.17.0-static>`__
+        of our `unofficial MuJoCo fork <mj_fork_>`__. Specifically, we build for the following platforms:
 
-   .. seealso::
+        .. list-table::
+            :header-rows: 1
 
-        See this `Dockerfile <https://github.com/davidhozic/mujoco-rs/blob/v7.1.x/Dockerfile.ubuntu>`_
-        for a reproducible build environment which, to our knowledge, matches MuJoCo's official
-        build environment.
-        The Dockerfile includes commented-out commands for installing the Rust toolchain and
-        for using clang-13/clang++-13 as the compiler. Our testing showed that static libraries
-        built in the container also work outside of the container. The Dockerfile's cmake command
-        enables interprocedural optimization (``-DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON``),
-        so a library built with it needs the system linker; see the attention block below. Set the
-        flag to ``OFF`` to keep the rust-lld linker usable.
+            * - Operating System / Architecture
+              - x86_64
+              - aarch64
+            * - Linux
+              - |checkmark|
+              - |checkmark|
+            * - Windows
+              - |checkmark|
+              - |checkmark|
+            * - macOS
+              - |checkmark|
+              - |checkmark|
 
-        The Dockerfile defines a container running Ubuntu 22.04. See the commented-out cmake
-        commands in the Dockerfile for the recommended compiler flags.
+        On **Windows**, each platform has two builds: one for the dynamic C runtime (CRT) and one for
+        the static CRT. MuJoCo-rs downloads the static CRT build when the ``crt-static`` target
+        feature is enabled (i.e., ``RUSTFLAGS="-C target-feature=+crt-static"``).
+        On **Linux**, the CRT is selected when the final binary is linked, thus the
+        single prebuilt MuJoCo library (archive) supports both the dynamic and the static CRT.
+        On **macOS**, only the dynamic CRT exists.
 
-4. Set the environment variable ``MUJOCO_STATIC_LINK_DIR`` to the **absolute** path of the ``lib/`` subdirectory
-   inside ``mujoco/build/`` (on some distributions, e.g. Fedora/RHEL, the directory may be ``lib64/``).
-   Bash example:
+        The environment variable ``MUJOCO_DOWNLOAD_DIR`` optionally sets the **absolute path**
+        of the download location (by default, this is the build-script's output directory inside ``target/``).
+        MuJoCo is extracted into its ``<os>-<arch>/mujoco-x.y.z-static/`` subdirectory
+        (``mujoco-x.y.z-static-crt-static/`` for the Windows static CRT build).
+        The ``download-static-mujoco`` and ``download-dynamic-mujoco`` features cannot be
+        enabled together.
 
-   ::
+        These are the details for individual build:
 
-      export MUJOCO_STATIC_LINK_DIR=/path/mujoco/build/lib/
+        .. list-table::
+            :header-rows: 1
 
-5. Build MuJoCo-rs
+            * - Operating System
+              - Compiler
+              - Linker
+              - Link-time optimization
+              - Notes
 
-   ::
+            * - Linux
+              - Clang 15.0.7 (Ubuntu 22.04)
+              - LLD 15
+              - |checkmark|
+              - - Requires glibc 2.33 or newer
+                - Embeds the C++ runtime (``libstdc++``)
+            * - Windows
+              - MSVC 19.44.35230 (Visual Studio 2022, toolset v143)
+              - Requires MSVC ``link.exe`` 14.44 or newer (Visual Studio 2022 17.14 or newer)
+              -
+              - Uses the dynamic (``/MD``) or the static (``/MT``) CRT, depending on the build
+            * - macOS
+              - Clang 17 (Homebrew ``llvm@17``)
+              - Apple ``ld`` 955.13
+              - |checkmark|
+              - - Requires macOS 11.0 or newer (deployment target)
+                - Uses the system C++ runtime (``libc++``)
 
-      cargo build
+        For **Windows**, as the table shows, the library archives are built with link-time optimization (LTO)
+        disabled. With LTO enabled, only the same MSVC toolchain that built the MuJoCo
+        (or Simulate) library can link it. For the slight performance gain of LTO,
+        compile MuJoCo yourself, as the other static-linking tab describes.
 
-.. attention::
+    .. tab:: Manual build and linking
 
-    **Link-time optimization**
+        To build manually, go to the `unofficial MuJoCo fork's repository <mj_fork_>`__
+        and build it with CMake.
 
-    Above CMake configuration command **disables** link-time optimization (LTO). This results in worse performance
-    but allows the compiled code to be used with the rust-lld linker, which is the default linker
-    on the **x86_64-unknown-linux-gnu** target.
+        ::
 
-    If performance is critical for you, link-time optimization of MuJoCo code can be enabled during configuration:
+            cmake -B build -S . -DBUILD_SHARED_LIBS:BOOL=OFF -DMUJOCO_HARDEN:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -DMUJOCO_ENABLE_LTO:BOOL=OFF -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF -DMUJOCO_BUILD_TESTS:BOOL=OFF
+            cmake --build build --parallel --target <TARGETS> --config=Release
 
-    ``cmake -B build -S . -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON ...``
+        ``<TARGETS>`` can be, for example, ``mujoco`` to build the MuJoCo library. To build the C++ Simulate
+        as a library (for use in MuJoCo-rs), target can be ``libmujoco_simulate``,
+        which builds both MuJoCo and Simulate.
 
-    When LTO is enabled, the **system linker** must be used, because rust-lld doesn't know how to read extra LTO information
-    produced by other linkers:
+        With **LTO disabled on Windows**, the default ``/EHsc`` flag causes a crash after a MuJoCo error.
+        On Windows (MSVC), thus also add ``-DCMAKE_CXX_FLAGS=/EHs``.
 
-    ::
+        This was tested with the ``gcc`` compiler on Linux. GCC 16 stops the build with a
+        ``-Werror=stringop-truncation`` error. With such GCC version, also use/add
+        ``-DCMAKE_CXX_FLAGS=-Wno-stringop-truncation``.
 
-        RUSTFLAGS="-C linker-features=-lld" cargo build
+        To actually build MuJoCo-rs, and make it link to the just built MuJoCo library, set the
+        ``MUJOCO_STATIC_LINK_DIR`` environment variable to the **absolute** path of where the MuJoCo library lies.
+        For example, this is usually in ``mujoco/build/lib`` or ``mujoco/build/lib64``
+        (``mujoco\build\lib\Release`` with Visual Studio generators).
+
+        MuJoCo-rs links the C++ runtime dynamically: ``libstdc++`` on Linux and ``libc++`` on macOS.
+
+        .. tabs::
+
+            .. tab:: Linux / macOS
+
+                ::
+
+                    export MUJOCO_STATIC_LINK_DIR=/path/mujoco/lib/
+
+            .. tab:: Windows
+
+                ::
+
+                    $env:MUJOCO_STATIC_LINK_DIR="C:\path\mujoco\lib\"
+
+        Then you may use ``cargo build`` normally.
+
+        .. rubric:: Performance and link-time optimization
+
+        Note that ``-DMUJOCO_ENABLE_LTO:BOOL=OFF`` **disables link-time optimization**,
+        thus resulting in slightly lower performance.
+        Enabling LTO causes compatibility problems on **the Linux platform**.
+        On Windows, the library must be linked with the same MSVC toolchain that built it.
+        There should be no problems on macOS.
+
+        To obtain better performance by enabling link-time optimization, set
+        ``-DMUJOCO_ENABLE_LTO:BOOL=ON`` and tell Rust to link everything using the
+        OS system linker, as opposed to rust-lld:
+
+        ::
+
+            RUSTFLAGS="-C linker-features=-lld" cargo build
+
+        Alternatively, you may also compile MuJoCo using the Clang compiler, which *should* [#clang-rust-comp]_ produce
+        artifacts compatible with the rust-lld linker.
+
+        .. [#clang-rust-comp] rust-lld, being an LLVM-compatible linker, should be able to link older clang-built
+           artifacts. This is not a guarantee.
 
 
-    In performance critical cases, it is also recommended to use the official MuJoCo shared (dynamic) libraries,
-    which are generally more optimized. Performance gain with LTO enabled on static builds is about 10% more steps per second.
+        .. seealso::
+
+           See this `Dockerfile <https://github.com/davidhozic/mujoco-rs/blob/v7.2.x/Dockerfile.ubuntu>`_
+           for a reproducible build environment which, to our knowledge, matches MuJoCo's official
+           build environment.
+           The Dockerfile includes commented-out commands for installing the Rust toolchain and
+           for using clang-13/clang++-13 as the compiler. Our testing showed that static libraries
+           built in the container also work outside of the container.
+           The Dockerfile defines a container running Ubuntu 22.04. See the commented-out cmake
+           commands in the Dockerfile for the recommended compiler flags.

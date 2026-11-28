@@ -363,7 +363,6 @@ mod tests {
 </mujoco>";
 
     const RAW_FILE_NAME: &str = "mujoco-rs-name.txt";
-    const REAL_FILE_NAME: &str = "mujoco-rs-real-name.txt";
 
     #[test]
     fn test_vfs_file_add_buffer() {
@@ -383,25 +382,26 @@ mod tests {
         let mut vfs;
 
         /* Add from a file */
-        fs::write(REAL_FILE_NAME, RAW_FILE_DATA).expect("could not write the file to disk");
+        let real_file_name = crate::util::testing::unique_path("mujoco-rs-real-name.txt");
+        fs::write(&real_file_name, RAW_FILE_DATA).expect("could not write the file to disk");
 
         /* No directory */
         vfs = MjVfs::new();
-        assert!(!vfs.contains_file(REAL_FILE_NAME));
-        assert!(vfs.add_file(REAL_FILE_NAME).is_ok());
-        assert!(vfs.contains_file(REAL_FILE_NAME));
+        assert!(!vfs.contains_file(&real_file_name));
+        assert!(vfs.add_file(&real_file_name).is_ok());
+        assert!(vfs.contains_file(&real_file_name));
         drop(vfs);
 
         /* With directory */
         vfs = MjVfs::new();
-        assert!(!vfs.contains_file_in("./", REAL_FILE_NAME));
-        assert!(vfs.add_file_from("./", REAL_FILE_NAME).is_ok());
-        assert!(vfs.contains_file_in("./", REAL_FILE_NAME));
+        assert!(!vfs.contains_file_in("./", &real_file_name));
+        assert!(vfs.add_file_from("./", &real_file_name).is_ok());
+        assert!(vfs.contains_file_in("./", &real_file_name));
 
-        fs::remove_file(REAL_FILE_NAME).expect("could not delete the file from disk");
+        fs::remove_file(&real_file_name).expect("could not delete the file from disk");
 
         /* Test whether the model is actually loaded correctly */
-        assert!(MjModel::from_xml_vfs(REAL_FILE_NAME, &vfs).is_ok());
+        assert!(MjModel::from_xml_vfs(&real_file_name, &vfs).is_ok());
     }
 
     #[test]
@@ -508,63 +508,63 @@ mod tests {
     /// `add_file` accepts `&Path`, `PathBuf`, `&str`, and `String`.
     #[test]
     fn test_vfs_add_file_path_types() {
-        const FILE: &str = "mujoco-rs-add-file-path-types.xml";
-        fs::write(FILE, RAW_FILE_DATA).expect("could not write temp file");
+        let file = crate::util::testing::unique_path("mujoco-rs-add-file-path-types.xml");
+        fs::write(&file, RAW_FILE_DATA).expect("could not write temp file");
 
         let mut vfs;
 
         // &str
         vfs = MjVfs::new();
-        vfs.add_file(FILE).unwrap();
-        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+        vfs.add_file(&file).unwrap();
+        assert!(MjModel::from_xml_vfs(&file, &vfs).is_ok());
 
         // String
         vfs = MjVfs::new();
-        vfs.add_file(String::from(FILE)).unwrap();
-        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+        vfs.add_file(String::from(&file)).unwrap();
+        assert!(MjModel::from_xml_vfs(&file, &vfs).is_ok());
 
         // &Path
         vfs = MjVfs::new();
-        vfs.add_file(Path::new(FILE)).unwrap();
-        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+        vfs.add_file(Path::new(&file)).unwrap();
+        assert!(MjModel::from_xml_vfs(&file, &vfs).is_ok());
 
         // PathBuf
         vfs = MjVfs::new();
-        vfs.add_file(PathBuf::from(FILE)).unwrap();
-        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+        vfs.add_file(PathBuf::from(&file)).unwrap();
+        assert!(MjModel::from_xml_vfs(&file, &vfs).is_ok());
 
-        fs::remove_file(FILE).expect("could not clean up temp file");
+        fs::remove_file(&file).expect("could not clean up temp file");
     }
 
     /// `add_file_from` accepts `&Path`, `PathBuf`, `&str`, and `String` for both arguments.
     #[test]
     fn test_vfs_add_file_from_path_types() {
-        const FILE: &str = "mujoco-rs-add-file-from-path-types.xml";
-        fs::write(FILE, RAW_FILE_DATA).expect("could not write temp file");
+        let file = crate::util::testing::unique_path("mujoco-rs-add-file-from-path-types.xml");
+        fs::write(&file, RAW_FILE_DATA).expect("could not write temp file");
 
         let mut vfs;
 
         // &str, &str
         vfs = MjVfs::new();
-        vfs.add_file_from("./", FILE).unwrap();
-        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+        vfs.add_file_from("./", &file).unwrap();
+        assert!(MjModel::from_xml_vfs(&file, &vfs).is_ok());
 
         // String, PathBuf
         vfs = MjVfs::new();
-        vfs.add_file_from(String::from("./"), PathBuf::from(FILE)).unwrap();
-        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+        vfs.add_file_from(String::from("./"), PathBuf::from(&file)).unwrap();
+        assert!(MjModel::from_xml_vfs(&file, &vfs).is_ok());
 
         // &Path, String
         vfs = MjVfs::new();
-        vfs.add_file_from(Path::new("./"), String::from(FILE)).unwrap();
-        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+        vfs.add_file_from(Path::new("./"), String::from(&file)).unwrap();
+        assert!(MjModel::from_xml_vfs(&file, &vfs).is_ok());
 
         // PathBuf, &Path
         vfs = MjVfs::new();
-        vfs.add_file_from(PathBuf::from("./"), Path::new(FILE)).unwrap();
-        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+        vfs.add_file_from(PathBuf::from("./"), Path::new(&file)).unwrap();
+        assert!(MjModel::from_xml_vfs(&file, &vfs).is_ok());
 
-        fs::remove_file(FILE).expect("could not clean up temp file");
+        fs::remove_file(&file).expect("could not clean up temp file");
     }
 
     #[test]

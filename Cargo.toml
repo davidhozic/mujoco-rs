@@ -12,7 +12,7 @@ unnecessary_lazy_evaluations = "allow"
 [package]
 name = "mujoco-rs"
 links = "mujoco"
-version = "7.1.0+mj-3.17.0"
+version = "7.2.0+mj-3.17.0"
 edition = "2024"
 license-file.workspace = true
 description = "A high-level Rust wrapper around the MuJoCo C library, with a native viewer (re-)written in Rust."
@@ -44,7 +44,7 @@ exclude = [
 ]
 
 [package.metadata.docs.rs]
-all-features = true
+features = ["viewer-ui", "renderer-winit-fallback", "cpp-viewer"]
 
 [[example]]
 name = "basic"
@@ -192,7 +192,10 @@ cpp-viewer = []
 
 ffi-regenerate = ["dep:regex", "dep:bindgen"]  # Generate the ffi bindings. Only used for updating the committed ``mujoco_c`` module.
 
-auto-download-mujoco = ["dep:ureq", "dep:flate2", "dep:tar", "dep:zip", "dep:sha2"]
+# Automatic downloads
+auto-download-mujoco = ["download-dynamic-mujoco"]  # deprecated for download-dynamic-mujoco
+download-dynamic-mujoco = ["dep:ureq", "dep:flate2", "dep:tar", "dep:zip", "dep:sha2"]
+download-static-mujoco = ["dep:ureq", "dep:flate2", "dep:tar", "dep:zip", "dep:sha2"]
 
 default = []
 
@@ -221,12 +224,8 @@ regex = {version = "1.13.1", optional = true}
 # Automatic download dependencies
 ureq = {version = "3.4.0", optional = true}
 sha2 = {version = "0.11.0", optional = true}
-
-[target.'cfg(target_os = "linux")'.build-dependencies]
 flate2 = {version = "1.1.9", optional = true}
 tar = {version = "0.4.46", optional = true}
-
-[target.'cfg(target_os = "windows")'.build-dependencies]
 zip = {version = "8.6.0", default-features = false, features = ["deflate"], optional = true}
 
 [target.'cfg(unix)'.build-dependencies]

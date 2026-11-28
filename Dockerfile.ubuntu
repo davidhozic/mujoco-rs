@@ -2,42 +2,29 @@
 ARG UBUNTU_VERSION=22.04
 FROM ubuntu:${UBUNTU_VERSION}
 
-ENV DEBIAN_FRONTEND=noninteractive
+ARG DEBIAN_FRONTEND=noninteractive
 
-# Pre-answer the keyboard questions
-RUN echo "keyboard-configuration  keyboard-configuration/layoutcode string us" | debconf-set-selections && \
-    echo "keyboard-configuration  keyboard-configuration/xkb-keymap select us" | debconf-set-selections
+# Build tools (git and ca-certificates for CMake FetchContent, the lib*-dev packages for GLFW).
+# One layer, no recommended packages, no package lists left in the image.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        clang-13 \
+        cmake \
+        git \
+        libgl1-mesa-dev \
+        libwayland-dev \
+        libxcursor-dev \
+        libxi-dev \
+        libxinerama-dev \
+        libxkbcommon-dev \
+        libxrandr-dev \
+        ninja-build \
+        pkg-config && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN apt update
-
-# Build tools
-RUN apt install -y \
-    build-essential \
-    cmake \
-    curl \
-    libgl1-mesa-dev \
-    libwayland-dev \
-    libxinerama-dev \
-    libxcursor-dev \
-    libxkbcommon-dev \
-    libxrandr-dev \
-    libxi-dev \
-    ninja-build \
-    git \
-    pkg-config \
-    clang-13
-
-# Cleanup
-# Remove cached package files (*.deb)
-RUN apt clean
-
-# Remove package files that can no longer be downloaded
-RUN apt autoclean
-
-# Remove packages that were installed as dependencies but are no longer needed
-RUN apt autoremove -y
-
-# Rust
+# Rust (also add curl to the packages above)
 # RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
 
 # ENV MUJOCO_STATIC_LINK_DIR=/mujoco/lib/
@@ -46,7 +33,7 @@ RUN apt autoremove -y
 WORKDIR /mujoco/
 
 # Commands.
-# Note that we enable IPO with -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON and
+# Note that we enable LTO with -DMUJOCO_ENABLE_LTO:BOOL=ON and
 # tell CMake to build static libs with -DBUILD_SHARED_LIBS:BOOL=OFF.
 # -----------------------------------------
 # docker buildx build . -t mujoco-build -f Dockerfile.ubuntu
@@ -55,7 +42,7 @@ WORKDIR /mujoco/
 # -----------------------------------------
 # cmake -S . -B build \
 #     -DCMAKE_BUILD_TYPE:STRING=Release \
-#     -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON \
+#     -DMUJOCO_ENABLE_LTO:BOOL=ON \
 #     -DCMAKE_INSTALL_PREFIX:STRING=${TMPDIR}/mujoco_install \
 #     -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF \
 #     -DMUJOCO_BUILD_TESTS=OFF \
@@ -65,7 +52,7 @@ WORKDIR /mujoco/
 #     -DCMAKE_CXX_COMPILER:STRING=clang++-13 \
 #     -DMUJOCO_HARDEN:BOOL=ON
 # -----------------------------------------
-# cmake --build build --parallel --target glfw libmujoco_simulate --config=Release
+# cmake --build build --parallel --target libmujoco_simulate --config=Release
 # -----------------------------------------
 # export MUJOCO_STATIC_LINK_DIR=$(realpath mujoco/build/lib/)
 # cargo run ...

@@ -2659,13 +2659,13 @@ mod tests {
 
     #[test]
     fn test_model_encode() {
-        const PATH_MJB: &str = "./__TMP_MODEL_ENCODE.mjb";
+        let path_mjb = crate::util::testing::unique_path("MODEL_ENCODE.mjb");
 
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
-        model.encode(PATH_MJB, "").unwrap();
+        model.encode(&path_mjb, "").unwrap();
 
-        let encoded = MjModel::from_buffer(&fs::read(PATH_MJB).unwrap()).unwrap();
-        fs::remove_file(PATH_MJB).unwrap();
+        let encoded = MjModel::from_buffer(&fs::read(&path_mjb).unwrap()).unwrap();
+        fs::remove_file(&path_mjb).unwrap();
 
         assert!(model.is_compatible_with_model(&encoded));
 
@@ -2865,13 +2865,13 @@ mod tests {
 
     #[test]
     fn test_model_prints() {
-        const TMP_FILE: &str = "tmpprint.txt";
+        let tmp_file = crate::util::testing::unique_path("tmpprint.txt");
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
-        assert!(model.print(TMP_FILE).is_ok());
-        fs::remove_file(TMP_FILE).unwrap();
+        assert!(model.print(&tmp_file).is_ok());
+        fs::remove_file(&tmp_file).unwrap();
 
-        assert!(model.print_formatted(TMP_FILE, "%.2f").is_ok());
-        fs::remove_file(TMP_FILE).unwrap();
+        assert!(model.print_formatted(&tmp_file, "%.2f").is_ok());
+        fs::remove_file(&tmp_file).unwrap();
     }
 
     #[test]
@@ -2916,16 +2916,16 @@ mod tests {
 
     #[test]
     fn test_model_save() {
-        const MODEL_SAVE_PATH: &str = "./__TMP_MODEL2.mjb";
+        let model_save_path = crate::util::testing::unique_path("MODEL2.mjb");
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
-        model.save_to_file(MODEL_SAVE_PATH).unwrap();
+        model.save_to_file(&model_save_path).unwrap();
 
-        let saved_data = fs::read(MODEL_SAVE_PATH).unwrap();
+        let saved_data = fs::read(&model_save_path).unwrap();
         let mut data = vec![0; saved_data.len()];
         model.save_to_buffer(&mut data).unwrap();
 
         assert_eq!(saved_data, data);
-        fs::remove_file(MODEL_SAVE_PATH).unwrap();
+        fs::remove_file(&model_save_path).unwrap();
 
         /* Test virtual file system load */
         let model = MjModel::from_buffer(&saved_data).unwrap();
@@ -2935,27 +2935,27 @@ mod tests {
 
     #[test]
     fn test_model_from_mjb() {
-        const MODEL_SAVE_PATH: &str = "./__TMP_MODEL3.mjb";
+        let model_save_path = crate::util::testing::unique_path("MODEL3.mjb");
         const MODEL_VFS_PATH: &str = "__TMP_MODEL3_VFS.mjb";
 
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
-        model.save_to_file(MODEL_SAVE_PATH).unwrap();
+        model.save_to_file(&model_save_path).unwrap();
 
-        let loaded = MjModel::from_mjb(MODEL_SAVE_PATH).unwrap();
+        let loaded = MjModel::from_mjb(&model_save_path).unwrap();
         assert!(model.is_compatible_with_model(&loaded));
         assert!(loaded.light("lamp_light2").is_some());
 
         /* Test virtual file system load */
         let mut vfs = MjVfs::new();
-        vfs.add_from_buffer(MODEL_VFS_PATH, &fs::read(MODEL_SAVE_PATH).unwrap()).unwrap();
+        vfs.add_from_buffer(MODEL_VFS_PATH, &fs::read(&model_save_path).unwrap()).unwrap();
         // The MJB now exists on the VFS only, so a load that ignores the VFS finds no file.
-        fs::remove_file(MODEL_SAVE_PATH).unwrap();
+        fs::remove_file(&model_save_path).unwrap();
 
         let loaded_vfs = MjModel::from_mjb_vfs(MODEL_VFS_PATH, &vfs).unwrap();
         assert!(model.is_compatible_with_model(&loaded_vfs));
         assert!(loaded_vfs.light("lamp_light2").is_some());
 
-        assert!(MjModel::from_mjb(MODEL_SAVE_PATH).is_err());
+        assert!(MjModel::from_mjb(&model_save_path).is_err());
     }
 
     #[test]
@@ -4553,13 +4553,13 @@ mod tests {
     #[test]
     fn test_embedding_of_model() {
         const TEX_NAME: &str = "someTexture.png";
-        const PNG_PATH: &str = "_TMP_someTexture.png";
+        let png_path = crate::util::testing::unique_path("someTexture.png");
 
-        std::fs::write(PNG_PATH, crate::util::testing::PNG_1X1).unwrap();
+        std::fs::write(&png_path, crate::util::testing::PNG_1X1).unwrap();
 
         let mut spec = MjSpec::new();
         spec.add_texture()
-            .with_file(PNG_PATH)
+            .with_file(&png_path)
             .with_name(TEX_NAME)
             .set_embed(MjtEmbed::mjEMBED_FALSE);
 
@@ -4576,6 +4576,6 @@ mod tests {
         assert_eq!(model.tex_data().len(), model.ffi().ntexdata as usize);
         assert_ne!(model.tex_pathadr()[0], -1);
 
-        std::fs::remove_file(PNG_PATH).unwrap();
+        std::fs::remove_file(&png_path).unwrap();
     }
 }

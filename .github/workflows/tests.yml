@@ -11,19 +11,45 @@ permissions:
 
 jobs:
   test:
-    name: "Test library on ${{ matrix.os }} with features: ${{join(matrix.features, ' ')}}"
+    name: "Test library on ${{ matrix.os }} (CRT: ${{ matrix.crt }}) with features: ${{join(matrix.features, ' ')}}"
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
         features: [
-          ["renderer", "renderer-winit-fallback", "auto-download-mujoco"],
-          ["auto-download-mujoco"]
+          ["renderer", "renderer-winit-fallback", "download-dynamic-mujoco"],
+          ["renderer", "renderer-winit-fallback", "download-static-mujoco"],
+          # Without the features. We assume static behaves the same due to passing above features configuration
+          ["download-dynamic-mujoco"],
         ]
+        crt: [dynamic]
+        include:
+          # Static archives on the other runners (no official dynamic download on macOS).
+          - os: ubuntu-22.04-arm
+            features: ["renderer", "renderer-winit-fallback", "download-static-mujoco"]
+            crt: dynamic
+          - os: windows-11-arm
+            features: ["renderer", "renderer-winit-fallback", "download-static-mujoco"]
+            crt: dynamic
+          - os: macos-15
+            features: ["renderer", "renderer-winit-fallback", "download-static-mujoco"]
+            crt: dynamic
+          - os: macos-15-intel
+            features: ["renderer", "renderer-winit-fallback", "download-static-mujoco"]
+            crt: dynamic
+          # Windows +crt-static archives.
+          - os: windows-latest
+            features: ["renderer", "renderer-winit-fallback", "download-static-mujoco"]
+            crt: static
+          - os: windows-11-arm
+            features: ["renderer", "renderer-winit-fallback", "download-static-mujoco"]
+            crt: static
       fail-fast: false
 
     env:
       RUST_BACKTRACE: "1"
+      RUSTFLAGS: ${{ matrix.crt == 'static' && '-C target-feature=+crt-static' || '' }}
+      RUSTDOCFLAGS: ${{ matrix.crt == 'static' && '-C target-feature=+crt-static' || '' }}
 
     steps:
       - name: Checkout
@@ -47,7 +73,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{join(matrix.features, '')}}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-crt-${{ matrix.crt }}-cargo-${{join(matrix.features, '')}}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install Mesa (OpenGL + EGL) on Ubuntu
         if: runner.os == 'Linux'
@@ -80,14 +106,14 @@ jobs:
         run: cargo build --release --lib --features ${{env.MJRS_FEATURES}} --no-default-features
 
       - name: Setup LD_LIBRARY_PATH on Linux
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && contains(matrix.features, 'download-dynamic-mujoco')
         run: |
           MUJOCO_DIR=$(ls | grep '^mujoco-' | head -n1)
           echo "LD_LIBRARY_PATH=$PWD/$MUJOCO_DIR/lib/:$LD_LIBRARY_PATH" >> $GITHUB_ENV
         shell: bash
 
       - name: Copy mujoco.dll on Windows
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && contains(matrix.features, 'download-dynamic-mujoco')
         run: |
           MUJOCO_DIR=$(ls | grep '^mujoco-' | head -n1)
           cp $PWD/$MUJOCO_DIR/bin/mujoco.dll .
@@ -106,6 +132,8 @@ jobs:
         run: cargo test --doc --features ${{env.MJRS_FEATURES}} --no-default-features
 
       - name: cargo test (model compatibility)
+        # Only the official dynamic library contains headers. 
+        if: contains(matrix.features, 'download-dynamic-mujoco')
         run: cargo test --test model_compatibility --features ${{env.MJRS_FEATURES}} --no-default-features
 
       - name: Run a rendering test

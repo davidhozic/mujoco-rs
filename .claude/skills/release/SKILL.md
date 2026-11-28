@@ -159,6 +159,12 @@ Run the existing gate skills. Each already sets `MUJOCO_DYNAMIC_LINK_DIR` /
    armv7/i686/wasm32 are 32-bit: `i64 -> usize` narrowing in slice-length casts is expected
    and benign there (MuJoCo allocates the counts), but any *new* pointer-width-dependent code
    should be eyeballed. A clean `cargo check` per target is the gate.
+7. **build.rs versions and hash checks**. MuJoCo-rs uses fixed sha256 hashes for automatic MuJoCo
+   downloads. These need to be updated in the build.rs build script every time a MuJoCo
+   (not -rs) version upgrade is performed. Audit each one against each supported download platform.
+   Make sure the hashes match the official MuJoCo downloads on GitHub and that all platform cases
+   are handled (i.e., that none are missing).
+
 
 Record pass/fail for each gate with the exact command and a one-line result.
 
