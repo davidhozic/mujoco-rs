@@ -414,7 +414,7 @@ fn main() {
                         feature = "download-dynamic-mujoco" => {cfg_select! {
                             // We don't support macOS here due to the complexity of MuJoCo's packaging for macOS.
                             // Feel free to submit a PR if you believe this can be universally implemented easily.
-                            target_os = "macos" => compile_error!("automatic downloads are not supported on macOS"),
+                            target_os = "macos" => compile_error!("download-dynamic-mujoco is not supported on macOS, use download-static-mujoco"),
                             _ => download_mujoco_dynamic(mujoco_version, HOST_OS)
                         }}
 

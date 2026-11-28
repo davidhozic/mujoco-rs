@@ -30,8 +30,8 @@
 //! ## 3D viewer
 //! The Rust-native viewer is available ([`viewer::MjViewer`]) when the `viewer` / `viewer-ui` feature is enabled.
 //! MuJoCo's C++ one ([`crate::cpp_viewer::MjViewerCpp`]) is available when the `cpp-viewer` feature is enabled.
-//! The C++ viewer, however, requires manual compilation of a patched MuJoCo repository,
-//! like described [here](https://mujoco-rs.readthedocs.io/en/v7.2.x/installation.html#static-linking).
+//! The C++ viewer, however, requires static linking to a patched MuJoCo build, either compiled manually
+//! or downloaded with the `download-static-mujoco` feature, like described [here](https://mujoco-rs.readthedocs.io/en/v7.2.x/installation.html#static-linking).
 //!
 //! ## Model editing
 //! [`MjModel`](wrappers::MjModel) can be procedurally generated through the model editing module.
